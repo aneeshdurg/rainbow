@@ -1,0 +1,3 @@
+(:RED)-[:CALLS*]->(:BLUE)
+(:GREEN)-[:CALLS*]->(:RED)
+(:YELLOW)-->(x) WHERE NOT x:YELLOW
