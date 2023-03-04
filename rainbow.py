@@ -20,6 +20,7 @@ class Rainbow:
     call_graph = {}
 
     def isFunction(self, node: clang.cindex.Cursor) -> Optional[str]:
+        """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
         if node.kind == clang.cindex.CursorKind.FUNCTION_DECL:
             return node.spelling
         for c in node.get_children():
@@ -29,6 +30,7 @@ class Rainbow:
         return None
 
     def isCall(self, node: clang.cindex.Cursor) -> Optional[str]:
+        """Determine if `node` is a function call, and if so, return the name of the function called if possible"""
         if node.kind != clang.cindex.CursorKind.CALL_EXPR:
             return None
         if (spelling := node.spelling) != "operator()":
@@ -43,12 +45,13 @@ class Rainbow:
         return None
 
     def isColor(self, node: clang.cindex.Cursor) -> Optional[str]:
+        """Determine if `node` is a tag defining a color"""
         if node.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
             if node.spelling.startswith(self.prefix):
                 return node.spelling[len(self.prefix) :]
         return None
 
-    def _explore(self, node: clang.cindex.Cursor, depth: int):
+    def _process(self, node: clang.cindex.Cursor, depth: int):
         indent = depth * 2
         # print(" " * indent, node.kind, node.spelling, file=sys.stderr)
         fnname = self.isFunction(node)
@@ -66,16 +69,19 @@ class Rainbow:
             if fdepth == (depth - 1):
                 self.fns_to_tags[fn].append(color)
         for c in node.get_children():
-            self._explore(c, depth + 1)
+            self._process(c, depth + 1)
         if fnname:
             self.fns_stack.pop()
 
-    def explore(self):
-        self._explore(self.tu.cursor, 0)
+    def process(self):
+        """Process the input file and extract the call graph, and colors for every function"""
+        self._process(self.tu.cursor, 0)
         assert len(self.fns_stack) == 0
 
     def toCypher(self) -> str:
-        if max(len(t) for t in self.fns_to_tags.values()) == 0:
+        """Must only be called after `self.process`.
+        Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
+        if len(self.fns_to_tags) == 0 or max(len(t) for t in self.fns_to_tags.values()) == 0:
             return "// no tagged functions\n;\n"
         output = []
         referenced_fns = set()
@@ -103,6 +109,7 @@ class Rainbow:
 
 
 def patternsToCypher(patterns: List[str]) -> str:
+    """Given a list of `patterns` output a cypher query combining them all"""
     output = []
     pcount = 0
     for i, pattern in enumerate(patterns):
@@ -121,7 +128,7 @@ def patternsToCypher(patterns: List[str]) -> str:
     return "\n".join(output)
 
 
-@click.command()
+@click.command(help="rainbow - arbitrary function coloring for c++!")
 @click.argument("cpp_file")
 @click.argument("config_file")
 @click.option(
@@ -133,18 +140,17 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
 
     prefix = config.get("prefix", "COLOR::")
     patterns: List[str] = []
-    if 'patterns' not in config:
+    if "patterns" not in config:
         raise Exception("Missing field 'patterns' from config file")
     else:
         assert isinstance(config["patterns"], list)
         patterns = config["patterns"]
 
-
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
     # TODO set compilation db if it exists
     rainbow = Rainbow(index.parse(cpp_file), prefix)
-    rainbow.explore()
+    rainbow.process()
     print(rainbow.toCypher())
     print(patternsToCypher(patterns))
 
