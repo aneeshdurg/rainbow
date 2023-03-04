@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import json
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import click
 
@@ -15,9 +15,9 @@ class Rainbow:
     tu: clang.cindex.TranslationUnit
     prefix: str
 
-    _fns_to_tags = {}
-    _call_graph = {}
-    _fns_stack = []
+    _fns_to_tags: Dict[str, List[str]] = field(default_factory=dict)
+    _call_graph: Dict[str, List[str]] = field(default_factory=dict)
+    _fns_stack: List[Tuple[str, int]] = field(default_factory=list)
 
     def isFunction(self, node: clang.cindex.Cursor) -> Optional[str]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
@@ -51,25 +51,36 @@ class Rainbow:
                 return node.spelling[len(self.prefix) :]
         return None
 
+    def _register_function(self, fnname: str, depth: int):
+        if fnname not in self._fns_to_tags:
+            self._fns_to_tags[fnname] = []
+        if fnname not in self._call_graph:
+            self._call_graph[fnname] = []
+        self._fns_stack.append((fnname, depth))
+
+    def _register_call(self, called_fn: str):
+        fn, _ = self._fns_stack[-1]
+        # TODO(aneesh) can lambdas shadow names of functions? This might need to also use the depth if so
+        self._call_graph[fn].append(called_fn)
+
+    def _try_tag_function(self, color: str, depth: int):
+        fn, fdepth = self._fns_stack[-1]
+        if fdepth == (depth - 1):
+            self._fns_to_tags[fn].append(color)
+
     def _process(self, node: clang.cindex.Cursor, depth: int):
         indent = depth * 2
         # print(" " * indent, node.kind, node.spelling, file=sys.stderr)
         fnname = self.isFunction(node)
         if fnname:
-            if fnname not in self._fns_to_tags:
-                self._fns_to_tags[fnname] = []
-            if fnname not in self._call_graph:
-                self._call_graph[fnname] = []
-            self._fns_stack.append((fnname, depth))
+            self._register_function(fnname, depth)
         elif called := self.isCall(node):
-            fn, _ = self._fns_stack[-1]
-            self._call_graph[fn].append(called)
+            self._register_call(called)
         elif color := self.isColor(node):
-            fn, fdepth = self._fns_stack[-1]
-            if fdepth == (depth - 1):
-                self._fns_to_tags[fn].append(color)
+            self._try_tag_function(color, depth)
         for c in node.get_children():
             self._process(c, depth + 1)
+
         if fnname:
             self._fns_stack.pop()
 
