@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import json
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import click
 
@@ -11,6 +13,7 @@ import clang.cindex
 @dataclass
 class Rainbow:
     tu: clang.cindex.TranslationUnit
+    prefix: str
 
     fns_to_tags = {}
     fns_stack = []
@@ -41,9 +44,8 @@ class Rainbow:
 
     def isColor(self, node: clang.cindex.Cursor) -> Optional[str]:
         if node.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
-            prefix = "COLOR::"
-            if node.spelling.startswith(prefix):
-                return node.spelling[len(prefix) :]
+            if node.spelling.startswith(self.prefix):
+                return node.spelling[len(self.prefix) :]
         return None
 
     def _explore(self, node: clang.cindex.Cursor, depth: int):
@@ -73,6 +75,8 @@ class Rainbow:
         assert len(self.fns_stack) == 0
 
     def toCypher(self) -> str:
+        if max(len(t) for t in self.fns_to_tags.values()) == 0:
+            return "// no tagged functions\n;\n"
         output = []
         referenced_fns = set()
         for fn in self.call_graph:
@@ -98,16 +102,15 @@ class Rainbow:
         return "\n".join(output)
 
 
-def patternFileToCypher(pattern_filename: str) -> str:
+def patternsToCypher(patterns: List[str]) -> str:
     output = []
     pcount = 0
-    with open(pattern_filename) as patternfile:
-        for i, pattern in enumerate(patternfile.readlines()):
-            limit = 0 if i == 0 else 1
-            output.append(
-                f"OPTIONAL MATCH {pattern.strip()} WITH *, count(*) > {limit} as invalidcalls{i}"
-            )
-            pcount += 1
+    for i, pattern in enumerate(patterns):
+        limit = 0 if i == 0 else 1
+        output.append(
+            f"OPTIONAL MATCH {pattern.strip()} WITH *, count(*) > {limit} as invalidcalls{i}"
+        )
+        pcount += 1
     output.append(
         "RETURN "
         + " OR ".join([f"invalidcalls{i}" for i in range(pcount)])
@@ -120,18 +123,30 @@ def patternFileToCypher(pattern_filename: str) -> str:
 
 @click.command()
 @click.argument("cpp_file")
-@click.argument("pattern_file")
+@click.argument("config_file")
 @click.option(
     "-c", "--clangLocation", type=Path, help="Path to libclang.so", required=True
 )
-def main(cpp_file: str, pattern_file: str, clanglocation: Optional[Path]):
+def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
+    with open(config_file) as f:
+        config = json.load(f)
+
+    prefix = config.get("prefix", "COLOR::")
+    patterns: List[str] = []
+    if 'patterns' not in config:
+        raise Exception("Missing field 'patterns' from config file")
+    else:
+        assert isinstance(config["patterns"], list)
+        patterns = config["patterns"]
+
+
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
     # TODO set compilation db if it exists
-    rainbow = Rainbow(index.parse(cpp_file))
+    rainbow = Rainbow(index.parse(cpp_file), prefix)
     rainbow.explore()
     print(rainbow.toCypher())
-    print(patternFileToCypher(pattern_file))
+    print(patternsToCypher(patterns))
 
 
 if __name__ == "__main__":
