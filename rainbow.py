@@ -1,7 +1,9 @@
-import sys
-
+#!/usr/bin/env python3
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+import click
 
 import clang.cindex
 
@@ -70,47 +72,67 @@ class Rainbow:
         self._explore(self.tu.cursor, 0)
         assert len(self.fns_stack) == 0
 
+    def toCypher(self) -> str:
+        output = []
+        referenced_fns = set()
+        for fn in self.call_graph:
+            if len(self.call_graph[fn]) > 0:
+                referenced_fns.add(fn)
+                for callee in self.call_graph[fn]:
+                    referenced_fns.add(callee)
 
-clang.cindex.Config.set_library_file("/home/aneesh/llvm-project/build/lib/libclang.so")
-index = clang.cindex.Index.create()
-# TODO set compilation db if it exists
-rainbow = Rainbow(index.parse(sys.argv[1]))
-rainbow.explore()
+        output.append("CREATE")
+        for fn in self.fns_to_tags:
+            if fn not in referenced_fns:
+                continue
+            tags = self.fns_to_tags[fn]
+            tag = ""
+            if len(tags):
+                tag = f" :{tags[0]}"
+            output.append(f"  ({fn}{tag}),")
+        for caller in self.call_graph:
+            for callee in self.call_graph[caller]:
+                output.append(f"  ({caller})-[:CALLs]->({callee}),")
+        output.append(" (sentinel)")
+        output.append(";")
+        return "\n".join(output)
 
-referenced_fns = set()
-for fn in rainbow.call_graph:
-    if len(rainbow.call_graph[fn]) > 0:
-        referenced_fns.add(fn)
-        for callee in rainbow.call_graph[fn]:
-            referenced_fns.add(callee)
 
-print("CREATE")
-for fn in rainbow.fns_to_tags:
-    if fn not in referenced_fns:
-        continue
-    tags = rainbow.fns_to_tags[fn]
-    tag = ""
-    if len(tags):
-        tag = f" :{tags[0]}"
-    print(f"  ({fn}{tag}),")
-for caller in rainbow.call_graph:
-    for callee in rainbow.call_graph[caller]:
-        print(f"  ({caller})-[:CALLs]->({callee}),")
-print(" (sentinel)")
-print(";")
+def patternFileToCypher(pattern_filename: str) -> str:
+    output = []
+    pcount = 0
+    with open(pattern_filename) as patternfile:
+        for i, pattern in enumerate(patternfile.readlines()):
+            limit = 0 if i == 0 else 1
+            output.append(
+                f"OPTIONAL MATCH {pattern.strip()} WITH *, count(*) > {limit} as invalidcalls{i}"
+            )
+            pcount += 1
+    output.append(
+        "RETURN "
+        + " OR ".join([f"invalidcalls{i}" for i in range(pcount)])
+        + " as invalidcalls"
+    )
+    output.append(";")
+    output.append("")
+    return "\n".join(output)
 
-pcount = 0
-with open(sys.argv[2]) as patternfile:
-    for i, pattern in enumerate(patternfile.readlines()):
-        limit = 0 if i == 0 else 1
-        print(
-            f"OPTIONAL MATCH {pattern.strip()} WITH *, count(*) > {limit} as invalidcalls{i}"
-        )
-        pcount += 1
-print(
-    "RETURN ",
-    " OR ".join([f"invalidcalls{i}" for i in range(pcount)]),
-    "as invalidcalls",
+
+@click.command()
+@click.argument("cpp_file")
+@click.argument("pattern_file")
+@click.option(
+    "-c", "--clangLocation", type=Path, help="Path to libclang.so", required=True
 )
-print(";")
-print("")
+def main(cpp_file: str, pattern_file: str, clanglocation: Optional[Path]):
+    clang.cindex.Config.set_library_file(clanglocation)
+    index = clang.cindex.Index.create()
+    # TODO set compilation db if it exists
+    rainbow = Rainbow(index.parse(cpp_file))
+    rainbow.explore()
+    print(rainbow.toCypher())
+    print(patternFileToCypher(pattern_file))
+
+
+if __name__ == "__main__":
+    main()
