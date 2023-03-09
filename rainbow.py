@@ -16,6 +16,7 @@ import clang.cindex
 class Rainbow:
     tu: clang.cindex.TranslationUnit
     prefix: str
+    colors: List[str]
 
     _fns_to_tags: Dict[str, List[str]] = field(default_factory=dict)
     _call_graph: Dict[str, List[str]] = field(default_factory=dict)
@@ -68,6 +69,8 @@ class Rainbow:
     def _try_tag_function(self, color: str, depth: int):
         fn, fdepth = self._fns_stack[-1]
         if fdepth == (depth - 1):
+            if color not in self.colors:
+                raise Exception(f"Could not tag function {fn} with unknown color {color}")
             self._fns_to_tags[fn].append(color)
 
     def _process(self, node: clang.cindex.Cursor, depth: int):
@@ -150,6 +153,7 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
         config = json.load(f)
 
     prefix = config.get("prefix", "COLOR::")
+    colors = config.get("colors", [])
     patterns: List[str] = []
     if "patterns" not in config:
         raise Exception("Missing field 'patterns' from config file")
