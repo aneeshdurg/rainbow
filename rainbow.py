@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import json
+import subprocess
+import sys
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -113,33 +115,28 @@ class Rainbow:
             tag = ""
             if len(tags):
                 tag = f" :{tags[0]}"
-            output.append(f"  ({fn}{tag}),")
-        for caller in self._call_graph:
-            for callee in self._call_graph[caller]:
-                output.append(f"  ({caller})-[:CALLs]->({callee}),")
-        output.append(" (sentinel)")
+            output.append(f"  ({fn}{tag}{{name: \"{fn}\"}}),")
+        for i, caller in enumerate(self._call_graph):
+            last_caller = i == (len(self._call_graph) - 1)
+            callees = self._call_graph[caller]
+            for j, callee in enumerate(callees):
+                last_edge = last_caller and j == (len(callees) - 1)
+                edge = f"  ({caller})-[:CALLS]->({callee})"
+                if not last_edge:
+                    edge += ","
+                output.append(edge)
         output.append(";")
         return "\n".join(output)
 
 
-def patternsToCypher(patterns: List[str]) -> str:
+def patternsToCypher(patterns: List[str]) -> List[str]:
     """Given a list of `patterns` output a cypher query combining them all"""
     output = []
-    pcount = 0
-    for i, pattern in enumerate(patterns):
-        limit = 0 if i == 0 else 1
+    for pattern in patterns:
         output.append(
-            f"OPTIONAL MATCH {pattern.strip()} WITH *, count(*) > {limit} as invalidcalls{i}"
+            f"MATCH {pattern.strip()} RETURN count(*) > 0 as invalidcalls\n;"
         )
-        pcount += 1
-    output.append(
-        "RETURN "
-        + " OR ".join([f"invalidcalls{i}" for i in range(pcount)])
-        + " as invalidcalls"
-    )
-    output.append(";")
-    output.append("")
-    return "\n".join(output)
+    return output
 
 
 @click.command(help="rainbow - arbitrary function coloring for c++!")
@@ -163,11 +160,28 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
     # TODO set compilation db if it exists
-    rainbow = Rainbow(index.parse(cpp_file), prefix)
+    rainbow = Rainbow(index.parse(cpp_file), prefix, colors)
     rainbow.process()
-    print(rainbow.toCypher())
-    print(patternsToCypher(patterns))
+    create_query = rainbow.toCypher()
+    validate_queries = patternsToCypher(patterns)
+    validate_query = "\n".join(validate_queries)
 
+    executor = config.get("executor", "executors/neo4j_adapter.py")
+    p = subprocess.Popen([executor, config_file],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE)
+    (res, _) = p.communicate((create_query + "\n" + validate_query).encode())
+    output = [json.loads(l) for l in res.decode().strip().split("\n") if len(l)]
+    exitcode = 0
+    if len(output) == 0:
+        invalidcalls = "UNKNOWN"
+        exitcode = 2
+    else:
+        invalidcalls = any(output)
+        if invalidcalls:
+            exitcode = 1
+    print("program is invalid:", invalidcalls, file=sys.stderr)
+    sys.exit(exitcode)
 
 if __name__ == "__main__":
     main()
