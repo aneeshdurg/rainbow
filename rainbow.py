@@ -100,8 +100,10 @@ class Rainbow:
         if (
             len(self._fns_to_tags) == 0
             or max(len(t) for t in self._fns_to_tags.values()) == 0
+            or len(self._call_graph) == 0
+            or max(len(t) for t in self._call_graph.values()) == 0
         ):
-            return "// no tagged functions\n;\n"
+            return "// no tagged function calls\n;\n"
         output = []
         referenced_fns = set()
         for fn in self._call_graph:
