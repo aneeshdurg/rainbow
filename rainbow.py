@@ -67,7 +67,7 @@ class Function:
         self.inner_scope_ = Scope(self.inner_scope_id)
 
     def alias(self) -> str:
-        return f"{self.name}_{self.inner_scope_id}"
+        return f"{self.name}__{self.inner_scope_id}"
 
     def get_scope(self) -> Scope:
         return self.inner_scope_
@@ -220,6 +220,8 @@ class Rainbow:
 
         # TODO(aneesh) Support namespaces and namespaced functions
 
+        # TODO - Are scopes not enough to resolve fn calls, do we also need line
+        # numbers to handle shadowing?
         if self.isScope(node):
             scope_id = self._get_new_scope_id()
             new_scope = Scope(scope_id)
@@ -234,9 +236,6 @@ class Rainbow:
 
         if called := self.isCall(node):
             scope.register_call(called)
-            # TODO can lambdas shadow names of functions? This might need to also use the depth if so
-            # TODO need to implement some kind of scope for the above
-            #  self._call_graph[fn].append(called_fn)
             return
 
         for c in node.get_children():
@@ -249,41 +248,59 @@ class Rainbow:
     def toCypher(self) -> str:
         """Must only be called after `self.process`.
         Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
-        if (
-            len(self._fns_to_tags) == 0
-            or max(len(t) for t in self._fns_to_tags.values()) == 0
-            or len(self._call_graph) == 0
-            or max(len(t) for t in self._call_graph.values()) == 0
-        ):
-            return "// no tagged function calls\n;\n"
-        output = []
-        referenced_fns = set()
-        for fn in self._call_graph:
-            if len(self._call_graph[fn]) > 0:
-                referenced_fns.add(fn)
-                for callee in self._call_graph[fn]:
-                    referenced_fns.add(callee)
+        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Function]):
+            for f in s.called_functions:
+                defn: Optional[Function] = None
+                if f in s.functions:
+                    defn = s.functions[f]
+                else:
+                    for rev_scope in scope_stack[::-1]:
+                        if f in rev_scope.functions:
+                            defn = rev_scope.functions[f]
+                            break
+                if not defn:
+                    # print("COULD NOT RESOLVE", f)
+                    continue
+                ret_val.append(defn)
+                # defn.dump(0)
+            for cs in s.child_scopes:
+                scope_stack.append(cs)
+                resolve_called_functions(scope_stack, cs, ret_val)
+                scope_stack.pop()
+        def fn_to_cypher(fn: Function) -> str:
+            color = ""
+            if fn.color:
+                color = f":{fn.color}"
+            return f"({fn.alias()}{color})"
 
-        output.append("CREATE")
-        for fn in self._fns_to_tags:
-            if fn not in referenced_fns:
-                continue
-            tags = self._fns_to_tags[fn]
-            tag = ""
-            if len(tags):
-                tag = f" :{tags[0]}"
-            output.append(f"  ({fn}{tag}{{name: \"{fn}\"}}),")
-        for i, caller in enumerate(self._call_graph):
-            last_caller = i == (len(self._call_graph) - 1)
-            callees = self._call_graph[caller]
-            for j, callee in enumerate(callees):
-                last_edge = last_caller and j == (len(callees) - 1)
-                edge = f"  ({caller})-[:CALLS]->({callee})"
-                if not last_edge:
-                    edge += ","
-                output.append(edge)
-        output.append(";")
-        return "\n".join(output)
+        def scope_fns_to_cypher(scope: Scope, first: bool, output: str) -> Tuple[bool, str]:
+            for f in scope.functions:
+                if not first:
+                    output += ",\n  "
+                first = False
+
+                fn = scope.functions[f]
+                output += fn_to_cypher(fn)
+                first, output = scope_fns_to_cypher(fn.get_scope(), first, output)
+            for c in scope.child_scopes:
+                first, output = scope_fns_to_cypher(c, first, output)
+            return (first, output)
+        def global_calls_to_cypher(scope: Scope):
+            def scope_calls_to_cypher(scope: Scope, fn: Function, output: str) -> str:
+                called = []
+                resolve_called_functions([scope], fn.get_scope(), called)
+                for c in called:
+                    output += ",\n  "
+                    output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
+                return output
+            output = ""
+            for f in scope.functions:
+                fn = scope.functions[f]
+                output = scope_calls_to_cypher(scope, fn, output)
+            return output
+        _, output = scope_fns_to_cypher(self._global_scope, True, "")
+        output += global_calls_to_cypher(self._global_scope)
+        return output
 
 
 def patternsToCypher(patterns: List[str]) -> List[str]:
@@ -320,8 +337,6 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     # TODO set compilation db if it exists
     rainbow = Rainbow(index.parse(cpp_file), prefix, colors)
     rainbow.process()
-    rainbow._global_scope.dump()
-    return
 
     create_query = rainbow.toCypher()
     validate_queries = patternsToCypher(patterns)
