@@ -14,9 +14,27 @@ import clang.cindex
 @dataclass
 class Scope:
     id_: int
-    functions: Dict[str, 'Function'] = field(default_factory=dict)
+    parent_scope: Optional['Scope']
+    functions: Dict[str, 'Scope'] = field(default_factory=dict)
     child_scopes: List['Scope'] = field(default_factory=list)
     called_functions: List[str] = field(default_factory=list)
+
+    # Fields that are only relevant if the Scope is a function
+    name: Optional[str] = None
+    color: Optional[str] = None
+    params: Dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def create_root(cls) -> 'Scope':
+        return Scope(0, None)
+
+    @classmethod
+    def create_function(cls, id_: int, parent: 'Scope', name: str, color: Optional[str], params: Dict[str, str]) -> 'Scope':
+        fs = Scope(id_, parent)
+        fs.name = name
+        fs.color = color
+        fs.params = params
+        return fs
 
     def empty(self):
         if len(self.functions) != 0:
@@ -36,10 +54,12 @@ class Scope:
     def dump(self, level: int = 0):
         prefix = " " * (2 * level)
         print("{", self.id_)
-        print(prefix, " ", "Functions")
+        print(prefix, "  Color:", self.color)
+        print(prefix, "  Params:", self.params)
+        print(prefix, "  Functions")
         for f in self.functions:
             fn = self.functions[f]
-            if fn.get_scope().empty() and fn.color is None:
+            if fn.empty() and fn.color is None:
                 continue
             print(prefix, "  ", f, end=" ")
             fn.dump(level + 2)
@@ -53,33 +73,9 @@ class Scope:
                 f.dump(level + 2)
         print(prefix + "}")
 
-
-@dataclass
-class Function:
-    name: str
-    color: Optional[str]
-    params: Dict[str, str]
-    parent_scope: Scope
-    inner_scope_id: int
-    inner_scope_: Scope = Scope(-1)
-
-    def __post_init__(self):
-        self.inner_scope_ = Scope(self.inner_scope_id)
-
     def alias(self) -> str:
-        return f"{self.name}__{self.inner_scope_id}"
-
-    def get_scope(self) -> Scope:
-        return self.inner_scope_
-
-    def dump(self, level: int):
-        print("{")
-        prefix = " " * (2 * level)
-        print(prefix, " Color:", self.color)
-        print(prefix, " Params:", self.params)
-        print(prefix, " Scope:", end=" ")
-        self.inner_scope_.dump(level + 1)
-        print(prefix + "}")
+        assert self.name
+        return f"{self.name}__{self.id_}"
 
 
 @dataclass
@@ -91,7 +87,7 @@ class Rainbow:
     _fns_to_tags: Dict[str, List[str]] = field(default_factory=dict)
     _call_graph: Dict[str, List[str]] = field(default_factory=dict)
 
-    _global_scope: Scope = Scope(0)
+    _global_scope: Scope = Scope.create_root()
     _scope_id_vendor: int = 0
 
     # Set of unsupported types we've already emitted warnings for
@@ -118,7 +114,6 @@ class Rainbow:
             if self.isLambda(c):
                 parent = c.semantic_parent
                 if self.isVarDecl(parent):
-                    print("FOUND LAMBDA NAMED", parent.spelling)
                     return parent.spelling
                 raise Exception("Unnamed lambda unsupported")
         return None
@@ -196,13 +191,13 @@ class Rainbow:
                     fn.params[param_name] = params[param_name]
         else:
             scope_id = self._get_new_scope_id()
-            fn = Function(fnname, fn_color, params, scope, scope_id)
+            fn = Scope.create_function(scope_id, scope, fnname, fn_color, params)
             scope.functions[fnname] = fn
 
         # This might just be a declaration, so there might not be a function
         # body
         if body:
-            self._process(body, fn.get_scope(), None);
+            self._process(body, fn, None);
 
     def isUnsupported(self, node: clang.cindex.Cursor):
         unsupported_types = [
@@ -224,7 +219,7 @@ class Rainbow:
         # numbers to handle shadowing?
         if self.isScope(node):
             scope_id = self._get_new_scope_id()
-            new_scope = Scope(scope_id)
+            new_scope = Scope(scope_id, scope)
             scope.child_scopes.append(new_scope)
             for c in node.get_children():
                 self._process(c, new_scope, decl_color)
@@ -248,9 +243,9 @@ class Rainbow:
     def toCypher(self) -> str:
         """Must only be called after `self.process`.
         Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
-        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Function]):
+        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Scope]):
             for f in s.called_functions:
-                defn: Optional[Function] = None
+                defn: Optional[Scope] = None
                 if f in s.functions:
                     defn = s.functions[f]
                 else:
@@ -267,7 +262,7 @@ class Rainbow:
                 scope_stack.append(cs)
                 resolve_called_functions(scope_stack, cs, ret_val)
                 scope_stack.pop()
-        def fn_to_cypher(fn: Function) -> str:
+        def fn_to_cypher(fn: Scope) -> str:
             color = ""
             if fn.color:
                 color = f":{fn.color}"
@@ -281,14 +276,14 @@ class Rainbow:
 
                 fn = scope.functions[f]
                 output += fn_to_cypher(fn)
-                first, output = scope_fns_to_cypher(fn.get_scope(), first, output)
+                first, output = scope_fns_to_cypher(fn, first, output)
             for c in scope.child_scopes:
                 first, output = scope_fns_to_cypher(c, first, output)
             return (first, output)
         def global_calls_to_cypher(scope: Scope):
-            def scope_calls_to_cypher(scope: Scope, fn: Function, output: str) -> str:
+            def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
                 called = []
-                resolve_called_functions([scope], fn.get_scope(), called)
+                resolve_called_functions([scope], fn, called)
                 for c in called:
                     output += ",\n  "
                     output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
