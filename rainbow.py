@@ -239,11 +239,11 @@ class Rainbow:
         # This might just be a declaration, so there might not be a function
         # body
         if body:
-            self._process(body, fn, None);
+            self._process(body, fn);
 
 
     pctr = 0
-    def _process(self, node: clang.cindex.Cursor, scope: Scope, decl_color: Optional[str]):
+    def _process(self, node: clang.cindex.Cursor, scope: Scope):
         if self.isUnsupported(node):
             if node.kind not in self._seen_unsupported_types:
                 self._seen_unsupported_types.add(node.kind)
@@ -263,7 +263,7 @@ class Rainbow:
             new_scope = Scope(scope_id, scope)
             scope.child_scopes.append(new_scope)
             for c in node.get_children():
-                self._process(c, new_scope, decl_color)
+                self._process(c, new_scope)
             return
 
         if fnname := self.isFunction(node):
@@ -275,7 +275,7 @@ class Rainbow:
             return
 
         for c in node.get_children():
-            self._process(c, scope, decl_color)
+            self._process(c, scope)
 
     def process(self):
         """Process the input file and extract the call graph, and colors for every function"""
