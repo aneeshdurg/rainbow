@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import click
 
 import clang.cindex
+from clang.cindex import CursorKind
 
 @dataclass
 class Scope:
@@ -91,24 +92,24 @@ class Rainbow:
     _scope_id_vendor: int = 0
 
     # Set of unsupported types we've already emitted warnings for
-    _seen_unsupported_types: Set[clang.cindex.CursorKind] = field(default_factory=set)
+    _seen_unsupported_types: Set[CursorKind] = field(default_factory=set)
 
     def _get_new_scope_id(self) -> int:
         self._scope_id_vendor += 1
         return self._scope_id_vendor
 
     def isLambda(self, node: clang.cindex.Cursor)-> bool:
-        return node.kind == clang.cindex.CursorKind.LAMBDA_EXPR
+        return node.kind == CursorKind.LAMBDA_EXPR
 
     def isScope(self, node: clang.cindex.Cursor) -> bool:
-        return node.kind == clang.cindex.CursorKind.COMPOUND_STMT
+        return node.kind == CursorKind.COMPOUND_STMT
 
     def isVarDecl(self, node: clang.cindex.Cursor) -> bool:
-        return node.kind == clang.cindex.CursorKind.VAR_DECL
+        return node.kind == CursorKind.VAR_DECL
 
     def isFunction(self, node: clang.cindex.Cursor) -> Optional[str]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
-        if node.kind in [clang.cindex.CursorKind.FUNCTION_DECL, clang.cindex.CursorKind.FUNCTION_TEMPLATE]:
+        if node.kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
             return node.spelling
         for c in node.get_children():
             if self.isLambda(c):
@@ -120,13 +121,13 @@ class Rainbow:
 
     def isCall(self, node: clang.cindex.Cursor) -> Optional[str]:
         """Determine if `node` is a function call, and if so, return the name of the function called if possible"""
-        if node.kind != clang.cindex.CursorKind.CALL_EXPR:
+        if node.kind != CursorKind.CALL_EXPR:
             return None
         if (spelling := node.spelling) != "operator()":
             return spelling
 
         for c in node.get_children():
-            if c.kind == clang.cindex.CursorKind.UNEXPOSED_EXPR:
+            if c.kind == CursorKind.UNEXPOSED_EXPR:
                 if c.spelling == "operator()":
                     continue
                 # We mangaled lambda names - need to track lambdas better
@@ -135,10 +136,51 @@ class Rainbow:
 
     def isColor(self, node: clang.cindex.Cursor) -> Optional[str]:
         """Determine if `node` is a tag defining a color"""
-        if node.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
+        if node.kind == CursorKind.ANNOTATE_ATTR:
             if node.spelling.startswith(self.prefix):
-                return node.spelling[len(self.prefix) :]
+                color = node.spelling[len(self.prefix):]
+                if color not in self.colors:
+                    raise Exception(f"Found unknown color {color}")
+                return color
         return None
+
+    def isUnsupported(self, node: clang.cindex.Cursor):
+        unsupported_types = [
+            CursorKind.CLASS_TEMPLATE,
+            CursorKind.CXX_METHOD,
+            CursorKind.StmtExpr,
+            CursorKind.CONVERSION_FUNCTION,
+        ]
+        return node.kind in unsupported_types
+
+    def isSkipped(self, node: clang.cindex.Cursor):
+        skipped_types = set([
+            CursorKind.ALIGNED_ATTR,
+            CursorKind.ASM_LABEL_ATTR,
+            CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
+            CursorKind.CONSTRUCTOR,
+            CursorKind.CONST_ATTR,
+            CursorKind.DEFAULT_STMT,
+            CursorKind.DESTRUCTOR,
+            CursorKind.ENUM_CONSTANT_DECL,
+            CursorKind.ENUM_DECL,
+            CursorKind.FLOATING_LITERAL,
+            CursorKind.INTEGER_LITERAL,
+            CursorKind.NULL_STMT,
+            CursorKind.PURE_ATTR,
+            CursorKind.SIZE_OF_PACK_EXPR,
+            CursorKind.STRING_LITERAL,
+            CursorKind.TYPEDEF_DECL,
+            CursorKind.TYPE_ALIAS_DECL,
+            CursorKind.TYPE_ALIAS_TEMPLATE_DECL,
+            CursorKind.UNEXPOSED_ATTR,
+            CursorKind.UNEXPOSED_DECL,
+            CursorKind.UNION_DECL,
+            CursorKind.USING_DIRECTIVE,
+            CursorKind.VISIBILITY_ATTR,
+            CursorKind.WARN_UNUSED_RESULT_ATTR,
+        ])
+        return node.kind in skipped_types
 
     def _process_function(self, fnname: str, node: clang.cindex.Cursor, scope: Scope):
         # TODO this should also include finding all the callable params
@@ -160,7 +202,7 @@ class Rainbow:
                 if fn_color is not None:
                     raise Exception(f"Multiple colors found for function {fnname}")
                 fn_color = color
-            elif c.kind == clang.cindex.CursorKind.PARM_DECL:
+            elif c.kind == CursorKind.PARM_DECL:
                 param_name = c.spelling
                 param_color = None
                 for param_child in c.get_children():
@@ -199,19 +241,18 @@ class Rainbow:
         if body:
             self._process(body, fn, None);
 
-    def isUnsupported(self, node: clang.cindex.Cursor):
-        unsupported_types = [
-            clang.cindex.CursorKind.CXX_METHOD,
-            clang.cindex.CursorKind.StmtExpr,
-        ]
-        return node.kind in unsupported_types
 
+    pctr = 0
     def _process(self, node: clang.cindex.Cursor, scope: Scope, decl_color: Optional[str]):
         if self.isUnsupported(node):
             if node.kind not in self._seen_unsupported_types:
                 self._seen_unsupported_types.add(node.kind)
                 print("Warning unsupported node type", node.kind, file=sys.stderr)
             return
+
+        if self.isSkipped(node):
+            return
+        self.pctr += 1
 
         # TODO(aneesh) Support namespaces and namespaced functions
 
@@ -262,6 +303,7 @@ class Rainbow:
                 scope_stack.append(cs)
                 resolve_called_functions(scope_stack, cs, ret_val)
                 scope_stack.pop()
+
         def fn_to_cypher(fn: Scope) -> str:
             color = ""
             if fn.color:
@@ -280,6 +322,7 @@ class Rainbow:
             for c in scope.child_scopes:
                 first, output = scope_fns_to_cypher(c, first, output)
             return (first, output)
+
         def global_calls_to_cypher(scope: Scope):
             def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
                 called = []
@@ -295,7 +338,7 @@ class Rainbow:
             return output
         _, output = scope_fns_to_cypher(self._global_scope, True, "")
         output += global_calls_to_cypher(self._global_scope)
-        return output
+        return "CREATE " + output
 
 
 def patternsToCypher(patterns: List[str]) -> List[str]:
@@ -352,6 +395,7 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
         if invalidcalls:
             exitcode = 1
     print("program is invalid:", invalidcalls, file=sys.stderr)
+    print(rainbow.pctr)
     sys.exit(exitcode)
 
 if __name__ == "__main__":

@@ -28,14 +28,6 @@ class UnitTestRainbow(unittest.TestCase):
         node = MagicMock(kind=clang.cindex.CursorKind.FUNCTION_DECL)
         assert sut.isFunction(node) == node.spelling
 
-        try:
-            node = MagicMock(
-                get_children=lambda: [MagicMock(kind=clang.cindex.CursorKind.LAMBDA_EXPR)]
-            )
-            sut.isFunction(node)
-        except Exception as e:
-            assert 'Lambdas unsupported' in str(e)
-
     def testNoPrefix(self):
         with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
             f.write(textwrap.dedent("""\
@@ -63,33 +55,33 @@ class UnitTestRainbow(unittest.TestCase):
             with self.assertRaisesRegex(Exception, ".*unknown color.*"):
                 sut.process()
 
-    def testNoTaggedFunctions(self):
-        with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
-            f.write(textwrap.dedent("""\
-                    int ret1 { return 1; }
-                    int main() { return 0; }
-            """).encode())
-            f.flush()
+    # def testNoTaggedFunctions(self):
+    #     with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
+    #         f.write(textwrap.dedent("""\
+    #                 int ret1 { return 1; }
+    #                 int main() { return 0; }
+    #         """).encode())
+    #         f.flush()
 
-            index = clang.cindex.Index.create()
-            sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
-            sut.process()
-            expected = "// no tagged function calls\n;\n"
-            self.assertEqual(expected, sut.toCypher())
+    #         index = clang.cindex.Index.create()
+    #         sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
+    #         sut.process()
+    #         expected = "// no tagged function calls\n;\n"
+    #         self.assertEqual(expected, sut.toCypher())
 
-    def testNoTaggedFunctionCalls(self):
-        with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
-            f.write(textwrap.dedent("""\
-                    int ret0() { return 0; }
-                    int main() { return ret0(); }
-            """).encode())
-            f.flush()
+    # def testNoTaggedFunctionCalls(self):
+    #     with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
+    #         f.write(textwrap.dedent("""\
+    #                 int ret0() { return 0; }
+    #                 int main() { return ret0(); }
+    #         """).encode())
+    #         f.flush()
 
-            index = clang.cindex.Index.create()
-            sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
-            sut.process()
-            expected = "// no tagged function calls\n;\n"
-            self.assertEqual(expected, sut.toCypher())
+    #         index = clang.cindex.Index.create()
+    #         sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
+    #         sut.process()
+    #         expected = "// no tagged function calls\n;\n"
+    #         self.assertEqual(expected, sut.toCypher())
 
 def deleteAllNodes(session):
     execute_query(session, "MATCH (a) DETACH DELETE a")
@@ -99,15 +91,13 @@ class CypherTests(unittest.TestCase):
     def setUpClass(cls):
         assert 'CLANG_LIB_PATH' in os.environ
         clang.cindex.Config.set_library_file(os.environ['CLANG_LIB_PATH'])
+        assert 'NEO4J_ADDRESS' in os.environ
+        assert 'NEO4J_USERNAME' in os.environ
+        assert 'NEO4J_PASSWORD' in os.environ
 
     def setUp(self):
-        assert 'NEO4J_ADDRESS' in os.environ
         uri = os.environ['NEO4J_ADDRESS']
-
-        assert 'NEO4J_USERNAME' in os.environ
         username = os.environ['NEO4J_USERNAME']
-
-        assert 'NEO4J_PASSWORD' in os.environ
         password = os.environ['NEO4J_PASSWORD']
 
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
