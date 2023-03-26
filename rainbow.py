@@ -181,7 +181,7 @@ class Rainbow:
         ])
         return node.kind in skipped_types
 
-    def _process_function(self, fnname: str, node: clang.cindex.Cursor, scope: Scope):
+    def _process_function(self, fnname: str, node: clang.cindex.Cursor, scope: Scope) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
         # TODO this should also include finding all the callable params
         # TODO Also need to do a pass verifing that all pass in params have the
         # right colors.
@@ -237,48 +237,49 @@ class Rainbow:
 
         # This might just be a declaration, so there might not be a function
         # body
-        if body:
-            self._process(body, fn);
+        return (body, fn)
 
+    def _process(self, root: clang.cindex.Cursor, r_scope: Scope):
+        frontier = [(root, r_scope)]
+        while len(frontier) > 0:
+            node, scope = frontier.pop()
+            if self.isUnsupported(node):
+                if node.kind not in self._seen_unsupported_types:
+                    self._seen_unsupported_types.add(node.kind)
+                    print("Warning unsupported node type", node.kind, file=sys.stderr)
+                continue
 
-    pctr = 0
-    def _process(self, node: clang.cindex.Cursor, scope: Scope):
-        if self.isUnsupported(node):
-            if node.kind not in self._seen_unsupported_types:
-                self._seen_unsupported_types.add(node.kind)
-                print("Warning unsupported node type", node.kind, file=sys.stderr)
-            return
+            if self.isSkipped(node):
+                continue
 
-        if self.isSkipped(node):
-            return
-        self.pctr += 1
+            # TODO(aneesh) Support namespaces and namespaced functions
 
-        # TODO(aneesh) Support namespaces and namespaced functions
+            # TODO - Are scopes not enough to resolve fn calls, do we also need line
+            # numbers to handle shadowing?
+            if self.isScope(node):
+                scope_id = self._get_new_scope_id()
+                new_scope = Scope(scope_id, scope)
+                scope.child_scopes.append(new_scope)
+                for c in node.get_children():
+                    frontier.append((c, new_scope))
+                continue
 
-        # TODO - Are scopes not enough to resolve fn calls, do we also need line
-        # numbers to handle shadowing?
-        if self.isScope(node):
-            scope_id = self._get_new_scope_id()
-            new_scope = Scope(scope_id, scope)
-            scope.child_scopes.append(new_scope)
+            if fnname := self.isFunction(node):
+                fn_body, fn = self._process_function(fnname, node, scope)
+                if fn_body:
+                    frontier.append((fn_body, fn))
+                continue
+
+            if called := self.isCall(node):
+                scope.register_call(called)
+                continue
+
             for c in node.get_children():
-                self._process(c, new_scope)
-            return
-
-        if fnname := self.isFunction(node):
-            self._process_function(fnname, node, scope)
-            return
-
-        if called := self.isCall(node):
-            scope.register_call(called)
-            return
-
-        for c in node.get_children():
-            self._process(c, scope)
+                frontier.append((c, scope))
 
     def process(self):
         """Process the input file and extract the call graph, and colors for every function"""
-        self._process(self.tu.cursor, self._global_scope, None)
+        self._process(self.tu.cursor, self._global_scope)
 
     def toCypher(self) -> str:
         """Must only be called after `self.process`.
@@ -394,8 +395,12 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
         if invalidcalls:
             exitcode = 1
     print("program is invalid:", invalidcalls, file=sys.stderr)
-    print(rainbow.pctr)
     sys.exit(exitcode)
 
 if __name__ == "__main__":
+    import os
+    if 'RAINBOW_PROFILE' in os.environ:
+        import cProfile
+        cProfile.run('main()')
+        sys.exit(0)
     main()
