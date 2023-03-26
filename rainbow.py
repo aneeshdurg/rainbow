@@ -111,12 +111,11 @@ class Rainbow:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
         if node.kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
             return node.spelling
-        for c in node.get_children():
-            if self.isLambda(c):
-                parent = c.semantic_parent
-                if self.isVarDecl(parent):
-                    return parent.spelling
-                raise Exception("Unnamed lambda unsupported")
+        if self.isLambda(node):
+            parent = node.semantic_parent
+            if self.isVarDecl(parent):
+                return parent.spelling
+            raise Exception("Unnamed lambda unsupported")
         return None
 
     def isCall(self, node: clang.cindex.Cursor) -> Optional[str]:
