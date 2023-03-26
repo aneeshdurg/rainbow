@@ -98,22 +98,22 @@ class Rainbow:
         self._scope_id_vendor += 1
         return self._scope_id_vendor
 
-    def isLambda(self, node: clang.cindex.Cursor)-> bool:
-        return node.kind == CursorKind.LAMBDA_EXPR
+    def isLambda(self, kind: CursorKind)-> bool:
+        return kind == CursorKind.LAMBDA_EXPR
 
-    def isScope(self, node: clang.cindex.Cursor) -> bool:
-        return node.kind == CursorKind.COMPOUND_STMT
+    def isScope(self, kind: CursorKind) -> bool:
+        return kind == CursorKind.COMPOUND_STMT
 
-    def isVarDecl(self, node: clang.cindex.Cursor) -> bool:
-        return node.kind == CursorKind.VAR_DECL
+    def isVarDecl(self, kind: CursorKind) -> bool:
+        return kind == CursorKind.VAR_DECL
 
-    def isFunction(self, node: clang.cindex.Cursor) -> Optional[str]:
+    def isFunction(self, node: clang.cindex.Cursor, kind: CursorKind) -> Optional[str]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
-        if node.kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
+        if kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
             return node.spelling
-        if self.isLambda(node):
+        if self.isLambda(kind):
             parent = node.semantic_parent
-            if self.isVarDecl(parent):
+            if self.isVarDecl(parent.kind):
                 return parent.spelling
             raise Exception("Unnamed lambda unsupported")
         return None
@@ -143,16 +143,16 @@ class Rainbow:
                 return color
         return None
 
-    def isUnsupported(self, node: clang.cindex.Cursor):
+    def isUnsupported(self, kind: CursorKind):
         unsupported_types = [
             CursorKind.CLASS_TEMPLATE,
             CursorKind.CXX_METHOD,
             CursorKind.StmtExpr,
             CursorKind.CONVERSION_FUNCTION,
         ]
-        return node.kind in unsupported_types
+        return kind in unsupported_types
 
-    def isSkipped(self, node: clang.cindex.Cursor):
+    def isSkipped(self, kind: CursorKind):
         skipped_types = set([
             CursorKind.ALIGNED_ATTR,
             CursorKind.ASM_LABEL_ATTR,
@@ -179,7 +179,7 @@ class Rainbow:
             CursorKind.VISIBILITY_ATTR,
             CursorKind.WARN_UNUSED_RESULT_ATTR,
         ])
-        return node.kind in skipped_types
+        return kind in skipped_types
 
     def _process_function(self, fnname: str, node: clang.cindex.Cursor, scope: Scope) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
         # TODO this should also include finding all the callable params
@@ -188,7 +188,7 @@ class Rainbow:
         params: Dict[str, str] = {}
         fn_color: Optional[str] = None
         body: Optional[clang.cindex.Cursor] = None
-        if self.isLambda(node):
+        if self.isLambda(node.kind):
             parent = node.semantic_parent
             for c in parent.get_children():
                 if color := self.isColor(c):
@@ -211,7 +211,7 @@ class Rainbow:
                         param_color = color
                 if param_color:
                     params[param_name] = param_color
-            elif self.isScope(c):
+            elif self.isScope(c.kind):
                 if body is not None:
                     raise Exception("?")
                 body = c
@@ -243,20 +243,21 @@ class Rainbow:
         frontier = [(root, r_scope)]
         while len(frontier) > 0:
             node, scope = frontier.pop()
-            if self.isUnsupported(node):
-                if node.kind not in self._seen_unsupported_types:
-                    self._seen_unsupported_types.add(node.kind)
-                    print("Warning unsupported node type", node.kind, file=sys.stderr)
+            kind = node.kind
+            if self.isUnsupported(kind):
+                if kind not in self._seen_unsupported_types:
+                    self._seen_unsupported_types.add(kind)
+                    print("Warning unsupported node type", kind, file=sys.stderr)
                 continue
 
-            if self.isSkipped(node):
+            if self.isSkipped(kind):
                 continue
 
             # TODO(aneesh) Support namespaces and namespaced functions
 
             # TODO - Are scopes not enough to resolve fn calls, do we also need line
             # numbers to handle shadowing?
-            if self.isScope(node):
+            if self.isScope(kind):
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
                 scope.child_scopes.append(new_scope)
@@ -264,7 +265,7 @@ class Rainbow:
                     frontier.append((c, new_scope))
                 continue
 
-            if fnname := self.isFunction(node):
+            if fnname := self.isFunction(node, kind):
                 fn_body, fn = self._process_function(fnname, node, scope)
                 if fn_body:
                     frontier.append((fn_body, fn))
