@@ -289,6 +289,10 @@ class Rainbow:
         # body
         return (body, fn)
 
+    def _append_to_frontier(self, node: clang.cindex.Cursor, scope: Scope, frontier: List[Tuple[clang.cindex.Cursor, Scope]]):
+        for c in list(node.get_children())[::-1]:
+            frontier.append((c, scope))
+
     def _process(self, root: clang.cindex.Cursor, r_scope: Scope):
         frontier = [(root, r_scope)]
         while len(frontier) > 0:
@@ -311,22 +315,20 @@ class Rainbow:
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
                 scope.child_scopes.append(new_scope)
-                for c in node.get_children():
-                    frontier.append((c, new_scope))
+                self._append_to_frontier(node, new_scope, frontier)
                 continue
 
             if fnname := self.isFunction(node, kind):
                 fn_body, fn = self._process_function(fnname, node, scope)
                 if fn_body:
-                    frontier.append((fn_body, fn))
+                    self._append_to_frontier(fn_body, fn, frontier)
                 continue
 
             if called := self.isCall(node):
                 scope.register_call(called)
                 continue
 
-            for c in node.get_children():
-                frontier.append((c, scope))
+            self._append_to_frontier(node, scope, frontier)
 
     def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""
