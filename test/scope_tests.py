@@ -12,6 +12,46 @@ class UnitTestScope(unittest.TestCase):
         assert "CLANG_LIB_PATH" in os.environ
         clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
 
+    def testTrivial(self):
+        sut = createRainbow(
+            textwrap.dedent(
+                """\
+            int main() {
+                return 0
+            }
+        """
+            ),
+            "",
+            [],
+        )
+        scope = sut.process()
+
+        assert scope.color is None
+        assert len(scope.params) == 0
+        assert len(scope.functions) == 1
+
+        main_fn = scope.functions["main"]
+        assert main_fn.color is None
+        assert len(main_fn.called_functions) == 0
+
+    def testRecursiveCallGraph(self):
+        sut = createRainbow(
+            textwrap.dedent(
+                """\
+            int main() {
+                return main();
+            }
+        """
+            ),
+            "",
+            [],
+        )
+        scope = sut.process()
+
+        assert len(scope.functions) == 1
+        main_fn = scope.functions["main"]
+        assert main_fn.called_functions == ["main"]
+
     def testBasicCallGraph(self):
         sut = createRainbow(
             textwrap.dedent(

@@ -145,7 +145,7 @@ class Rainbow:
     _fns_to_tags: Dict[str, List[str]] = field(default_factory=dict)
     _call_graph: Dict[str, List[str]] = field(default_factory=dict)
 
-    _global_scope: Scope = Scope.create_root()
+    _global_scope: Scope = field(default_factory=Scope.create_root)
     _scope_id_vendor: int = 0
 
     # Set of unsupported types we've already emitted warnings for

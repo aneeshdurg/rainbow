@@ -10,4 +10,5 @@ def createRainbow(input_: str, prefix: str, colors: List[str]) -> Rainbow:
         f.write(input_.encode())
         f.flush()
         index = clang.cindex.Index.create()
-        return Rainbow(index.parse(f.name), prefix, colors)
+        tu = index.parse(f.name)
+        return Rainbow(tu, prefix, colors)
