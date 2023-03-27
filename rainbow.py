@@ -195,9 +195,10 @@ class Rainbow:
     def isUnsupported(self, kind: CursorKind):
         unsupported_types = [
             CursorKind.CLASS_TEMPLATE,
-            CursorKind.CXX_METHOD,
-            CursorKind.StmtExpr,
             CursorKind.CONVERSION_FUNCTION,
+            CursorKind.CXX_METHOD,
+            CursorKind.FUNCTION_TEMPLATE,
+            CursorKind.StmtExpr,
         ]
         return kind in unsupported_types
 
