@@ -1,14 +1,9 @@
 import os
-import tempfile
 import textwrap
 import unittest
-from unittest.mock import MagicMock
-
-from neo4j import GraphDatabase
+from test.utils import createRainbow
 
 import clang.cindex
-import rainbow
-from executors.neo4j_adapter import execute_query
 
 
 class UnitTestScope(unittest.TestCase):
@@ -18,26 +13,23 @@ class UnitTestScope(unittest.TestCase):
         clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
 
     def testBasicCallGraph(self):
-        with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
-            f.write(
-                textwrap.dedent(
-                    """\
-                void fn1() {}
-                void fn2() {}
-                void fn3() {}
-                int main() {
-                    fn1();
-                    fn2();
-                    fn3();
-                    return 0;
-                }
-            """
-                ).encode()
-            )
-            f.flush()
-
-            index = clang.cindex.Index.create()
-            sut = rainbow.Rainbow(index.parse(f.name), "", [])
+        sut = createRainbow(
+            textwrap.dedent(
+                """\
+            void fn1() {}
+            void fn2() {}
+            void fn3() {}
+            int main() {
+                fn1();
+                fn2();
+                fn3();
+                return 0;
+            }
+        """
+            ),
+            "",
+            [],
+        )
         scope = sut.process()
 
         assert "main" in scope.functions
