@@ -85,6 +85,13 @@ class UnitTestScope(unittest.TestCase):
         assert len(main_fn.child_scopes) == 0
         assert main_fn.called_functions == ["fn1", "fn2", "fn3"]
 
+    def testBasicColor(self):
+        sut = createRainbow(
+            """[[clang::annotate("TEST")]] int main() { return 0; }""", "", ["TEST"]
+        )
+        scope = sut.process()
+        assert scope.functions["main"].color == "TEST"
+
 
 if __name__ == "__main__":
     unittest.main()
