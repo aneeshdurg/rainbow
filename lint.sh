@@ -1,5 +1,12 @@
 #!/usr/bin/bash
-files=$(git diff --cached --name-only --diff-filter=ACM | grep ".py$")
+
+if [[ -z "$CHECK_ONLY" ]]
+then
+  files=$(git ls-files | grep ".py$")
+else
+  files=$(git diff --cached --name-only --diff-filter=ACM | grep ".py$")
+fi
+
 set -e
 if [[ -z "$files" ]]
 then
