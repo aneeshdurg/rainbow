@@ -4,17 +4,21 @@ import sys
 
 from neo4j import GraphDatabase
 
+
 def execute_query(session, query):
     def run_q(tx):
         result = tx.run(query)
         return result.to_df()
+
     return session.execute_write(run_q)
+
 
 def readUntilDelim(delim: str) -> str:
     data = ""
     while (line := input()).strip() != delim:
         data += line + "\n"
     return data
+
 
 if __name__ == "__main__":
     config_file = sys.argv[1]

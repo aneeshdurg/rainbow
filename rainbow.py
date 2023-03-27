@@ -2,8 +2,7 @@
 import json
 import subprocess
 import sys
-
-from dataclasses import dataclass, field, MISSING
+from dataclasses import MISSING, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -12,12 +11,13 @@ import click
 import clang.cindex
 from clang.cindex import CursorKind
 
+
 @dataclass
 class Scope:
     id_: int
-    parent_scope: Optional['Scope']
-    functions: Dict[str, 'Scope'] = field(default_factory=dict)
-    child_scopes: List['Scope'] = field(default_factory=list)
+    parent_scope: Optional["Scope"]
+    functions: Dict[str, "Scope"] = field(default_factory=dict)
+    child_scopes: List["Scope"] = field(default_factory=list)
     called_functions: List[str] = field(default_factory=list)
 
     # Fields that are only relevant if the Scope is a function
@@ -26,11 +26,18 @@ class Scope:
     params: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def create_root(cls) -> 'Scope':
+    def create_root(cls) -> "Scope":
         return Scope(0, None)
 
     @classmethod
-    def create_function(cls, id_: int, parent: 'Scope', name: str, color: Optional[str], params: Dict[str, str]) -> 'Scope':
+    def create_function(
+        cls,
+        id_: int,
+        parent: "Scope",
+        name: str,
+        color: Optional[str],
+        params: Dict[str, str],
+    ) -> "Scope":
         fs = Scope(id_, parent)
         fs.name = name
         fs.color = color
@@ -70,7 +77,6 @@ class Scope:
                 color = f":{fn.color}"
             return f"({fn.alias()}{color})"
 
-
         for f in self.functions:
             if not first:
                 output += ",\n  "
@@ -85,7 +91,9 @@ class Scope:
         return (first, output)
 
     def _calls_to_cypher(self):
-        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Scope]):
+        def resolve_called_functions(
+            scope_stack: List[Scope], s: Scope, ret_val: List[Scope]
+        ):
             for f in s.called_functions:
                 defn: Optional[Scope] = None
                 if f in s.functions:
@@ -104,7 +112,6 @@ class Scope:
                 scope_stack.append(cs)
                 resolve_called_functions(scope_stack, cs, ret_val)
                 scope_stack.pop()
-
 
         def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
             called = []
@@ -128,6 +135,7 @@ class Scope:
         output += self._calls_to_cypher()
         return "CREATE " + output
 
+
 @dataclass
 class Rainbow:
     tu: clang.cindex.TranslationUnit
@@ -147,7 +155,7 @@ class Rainbow:
         self._scope_id_vendor += 1
         return self._scope_id_vendor
 
-    def isLambda(self, kind: CursorKind)-> bool:
+    def isLambda(self, kind: CursorKind) -> bool:
         return kind == CursorKind.LAMBDA_EXPR
 
     def isScope(self, kind: CursorKind) -> bool:
@@ -186,7 +194,7 @@ class Rainbow:
         """Determine if `node` is a tag defining a color"""
         if node.kind == CursorKind.ANNOTATE_ATTR:
             if node.spelling.startswith(self.prefix):
-                color = node.spelling[len(self.prefix):]
+                color = node.spelling[len(self.prefix) :]
                 if color not in self.colors:
                     raise Exception(f"Found unknown color {color}")
                 return color
@@ -203,35 +211,39 @@ class Rainbow:
         return kind in unsupported_types
 
     def isSkipped(self, kind: CursorKind):
-        skipped_types = set([
-            CursorKind.ALIGNED_ATTR,
-            CursorKind.ASM_LABEL_ATTR,
-            CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
-            CursorKind.CONSTRUCTOR,
-            CursorKind.CONST_ATTR,
-            CursorKind.DEFAULT_STMT,
-            CursorKind.DESTRUCTOR,
-            CursorKind.ENUM_CONSTANT_DECL,
-            CursorKind.ENUM_DECL,
-            CursorKind.FLOATING_LITERAL,
-            CursorKind.INTEGER_LITERAL,
-            CursorKind.NULL_STMT,
-            CursorKind.PURE_ATTR,
-            CursorKind.SIZE_OF_PACK_EXPR,
-            CursorKind.STRING_LITERAL,
-            CursorKind.TYPEDEF_DECL,
-            CursorKind.TYPE_ALIAS_DECL,
-            CursorKind.TYPE_ALIAS_TEMPLATE_DECL,
-            CursorKind.UNEXPOSED_ATTR,
-            CursorKind.UNEXPOSED_DECL,
-            CursorKind.UNION_DECL,
-            CursorKind.USING_DIRECTIVE,
-            CursorKind.VISIBILITY_ATTR,
-            CursorKind.WARN_UNUSED_RESULT_ATTR,
-        ])
+        skipped_types = set(
+            [
+                CursorKind.ALIGNED_ATTR,
+                CursorKind.ASM_LABEL_ATTR,
+                CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
+                CursorKind.CONSTRUCTOR,
+                CursorKind.CONST_ATTR,
+                CursorKind.DEFAULT_STMT,
+                CursorKind.DESTRUCTOR,
+                CursorKind.ENUM_CONSTANT_DECL,
+                CursorKind.ENUM_DECL,
+                CursorKind.FLOATING_LITERAL,
+                CursorKind.INTEGER_LITERAL,
+                CursorKind.NULL_STMT,
+                CursorKind.PURE_ATTR,
+                CursorKind.SIZE_OF_PACK_EXPR,
+                CursorKind.STRING_LITERAL,
+                CursorKind.TYPEDEF_DECL,
+                CursorKind.TYPE_ALIAS_DECL,
+                CursorKind.TYPE_ALIAS_TEMPLATE_DECL,
+                CursorKind.UNEXPOSED_ATTR,
+                CursorKind.UNEXPOSED_DECL,
+                CursorKind.UNION_DECL,
+                CursorKind.USING_DIRECTIVE,
+                CursorKind.VISIBILITY_ATTR,
+                CursorKind.WARN_UNUSED_RESULT_ATTR,
+            ]
+        )
         return kind in skipped_types
 
-    def _process_function(self, fnname: str, node: clang.cindex.Cursor, scope: Scope) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
+    def _process_function(
+        self, fnname: str, node: clang.cindex.Cursor, scope: Scope
+    ) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
         # TODO this should also include finding all the callable params
         # TODO Also need to do a pass verifing that all pass in params have the
         # right colors.
@@ -257,7 +269,9 @@ class Rainbow:
                 for param_child in c.get_children():
                     if color := self.isColor(param_child):
                         if param_color is not None:
-                            raise Exception(f"Multiple colors found for param {param_name} of function {fnname}")
+                            raise Exception(
+                                f"Multiple colors found for param {param_name} of function {fnname}"
+                            )
                         param_color = color
                 if param_color:
                     params[param_name] = param_color
@@ -277,7 +291,9 @@ class Rainbow:
             for param_name in params:
                 if param_name in fn.params:
                     if fn.params[param_name] != params[param_name]:
-                        raise Exception(f"Multiple colors found for param {param_name} of function {fnname}")
+                        raise Exception(
+                            f"Multiple colors found for param {param_name} of function {fnname}"
+                        )
                 else:
                     fn.params[param_name] = params[param_name]
         else:
@@ -289,7 +305,12 @@ class Rainbow:
         # body
         return (body, fn)
 
-    def _append_to_frontier(self, node: clang.cindex.Cursor, scope: Scope, frontier: List[Tuple[clang.cindex.Cursor, Scope]]):
+    def _append_to_frontier(
+        self,
+        node: clang.cindex.Cursor,
+        scope: Scope,
+        frontier: List[Tuple[clang.cindex.Cursor, Scope]],
+    ):
         for c in list(node.get_children())[::-1]:
             frontier.append((c, scope))
 
@@ -340,9 +361,7 @@ def patternsToCypher(patterns: List[str]) -> List[str]:
     """Given a list of `patterns` output a cypher query combining them all"""
     output = []
     for pattern in patterns:
-        output.append(
-            f"MATCH {pattern.strip()} RETURN count(*) > 0 as invalidcalls\n;"
-        )
+        output.append(f"MATCH {pattern.strip()} RETURN count(*) > 0 as invalidcalls\n;")
     return output
 
 
@@ -377,9 +396,9 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     validate_query = "\n".join(validate_queries)
 
     executor = config.get("executor", "executors/neo4j_adapter.py")
-    p = subprocess.Popen([executor, config_file],
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE)
+    p = subprocess.Popen(
+        [executor, config_file], stdout=subprocess.PIPE, stdin=subprocess.PIPE
+    )
     (res, _) = p.communicate((create_query + "\n" + validate_query).encode())
     output = [json.loads(l) for l in res.decode().strip().split("\n") if len(l)]
     exitcode = 0
@@ -393,10 +412,13 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     print("program is invalid:", invalidcalls, file=sys.stderr)
     sys.exit(exitcode)
 
+
 if __name__ == "__main__":
     import os
-    if 'RAINBOW_PROFILE' in os.environ:
+
+    if "RAINBOW_PROFILE" in os.environ:
         import cProfile
-        cProfile.run('main()')
+
+        cProfile.run("main()")
         sys.exit(0)
     main()

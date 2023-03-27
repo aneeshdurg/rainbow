@@ -13,7 +13,9 @@ def dump_ast(tu: clang.cindex.TranslationUnit):
         print(" " * indent, node.kind, node.spelling)
         for c in node.get_children():
             _process(c, depth + 1)
+
     _process(tu.cursor, 0)
+
 
 @click.command(help="dump C++ ast")
 @click.argument("cpp_file")
@@ -24,6 +26,7 @@ def main(cpp_file: str, clanglocation: Optional[Path]):
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
     dump_ast(index.parse(cpp_file))
+
 
 if __name__ == "__main__":
     main()
