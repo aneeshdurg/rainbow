@@ -13,17 +13,14 @@ class UnitTestScope(unittest.TestCase):
         clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
 
     def testTrivial(self):
-        sut = createRainbow(
-            textwrap.dedent(
-                """\
+        src = textwrap.dedent(
+            """\
             int main() {
                 return 0
             }
         """
-            ),
-            "",
-            [],
         )
+        sut = createRainbow(src, "", [])
         scope = sut.process()
 
         assert scope.color is None
@@ -35,17 +32,14 @@ class UnitTestScope(unittest.TestCase):
         assert len(main_fn.called_functions) == 0
 
     def testRecursiveCallGraph(self):
-        sut = createRainbow(
-            textwrap.dedent(
-                """\
+        src = textwrap.dedent(
+            """\
             int main() {
                 return main();
             }
         """
-            ),
-            "",
-            [],
         )
+        sut = createRainbow(src, "", [])
         scope = sut.process()
 
         assert len(scope.functions) == 1
@@ -53,9 +47,8 @@ class UnitTestScope(unittest.TestCase):
         assert main_fn.called_functions == ["main"]
 
     def testBasicCallGraph(self):
-        sut = createRainbow(
-            textwrap.dedent(
-                """\
+        src = textwrap.dedent(
+            """\
             void fn1() {}
             void fn2() {}
             void fn3() {}
@@ -66,10 +59,8 @@ class UnitTestScope(unittest.TestCase):
                 return 0;
             }
         """
-            ),
-            "",
-            [],
         )
+        sut = createRainbow(src, "", [])
         scope = sut.process()
 
         assert "main" in scope.functions
