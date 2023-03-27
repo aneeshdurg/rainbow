@@ -37,18 +37,6 @@ class Scope:
         fs.params = params
         return fs
 
-    def empty(self):
-        if len(self.functions) != 0:
-            return False
-        if len(self.called_functions) != 0:
-            return False
-
-        if len(self.child_scopes) == 0:
-            return True
-        if all([s.empty() for s in self.child_scopes]):
-            return True
-
-
     def register_call(self, fnname: str):
         self.called_functions.append(fnname)
 
@@ -60,8 +48,6 @@ class Scope:
         print(prefix, "  Functions")
         for f in self.functions:
             fn = self.functions[f]
-            if fn.empty() and fn.color is None:
-                continue
             print(prefix, "  ", f, end=" ")
             fn.dump(level + 2)
         print(prefix, " ", "Called_functions")
