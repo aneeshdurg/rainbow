@@ -69,15 +69,78 @@ class Scope:
             print(prefix, "   ", f)
         print(prefix, " ", "Child Scopes")
         for i, f in enumerate(self.child_scopes):
-            if not f.empty():
-                print(prefix, "  ", i, ":", end=" ")
-                f.dump(level + 2)
+            print(prefix, "  ", i, ":", end=" ")
+            f.dump(level + 2)
         print(prefix + "}")
 
     def alias(self) -> str:
         assert self.name
         return f"{self.name}__{self.id_}"
 
+    def _scope_fns_to_cypher(self, first: bool, output: str) -> Tuple[bool, str]:
+        def fn_to_cypher(fn: Scope) -> str:
+            color = ""
+            if fn.color:
+                color = f":{fn.color}"
+            return f"({fn.alias()}{color})"
+
+
+        for f in self.functions:
+            if not first:
+                output += ",\n  "
+            first = False
+
+            fn = self.functions[f]
+            output += fn_to_cypher(fn)
+            first, output = fn._scope_fns_to_cypher(first, output)
+
+        for c in self.child_scopes:
+            first, output = c._scope_fns_to_cypher(first, output)
+        return (first, output)
+
+    def _calls_to_cypher(self):
+        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Scope]):
+            for f in s.called_functions:
+                defn: Optional[Scope] = None
+                if f in s.functions:
+                    defn = s.functions[f]
+                else:
+                    for rev_scope in scope_stack[::-1]:
+                        if f in rev_scope.functions:
+                            defn = rev_scope.functions[f]
+                            break
+                if not defn:
+                    # print("COULD NOT RESOLVE", f)
+                    continue
+                ret_val.append(defn)
+                # defn.dump(0)
+            for cs in s.child_scopes:
+                scope_stack.append(cs)
+                resolve_called_functions(scope_stack, cs, ret_val)
+                scope_stack.pop()
+
+
+        def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
+            called = []
+            resolve_called_functions([scope], fn, called)
+            for c in called:
+                output += ",\n  "
+                output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
+            return output
+
+        output = ""
+        for f in self.functions:
+            fn = self.functions[f]
+            output = scope_calls_to_cypher(self, fn, output)
+        return output
+
+    def toCypher(self) -> str:
+        """Must only be called after `self.process`.
+        Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
+
+        _, output = self._scope_fns_to_cypher(True, "")
+        output += self._calls_to_cypher()
+        return "CREATE " + output
 
 @dataclass
 class Rainbow:
@@ -278,68 +341,10 @@ class Rainbow:
             for c in node.get_children():
                 frontier.append((c, scope))
 
-    def process(self):
+    def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""
         self._process(self.tu.cursor, self._global_scope)
-
-    def toCypher(self) -> str:
-        """Must only be called after `self.process`.
-        Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
-        def resolve_called_functions(scope_stack: List[Scope], s: Scope, ret_val: List[Scope]):
-            for f in s.called_functions:
-                defn: Optional[Scope] = None
-                if f in s.functions:
-                    defn = s.functions[f]
-                else:
-                    for rev_scope in scope_stack[::-1]:
-                        if f in rev_scope.functions:
-                            defn = rev_scope.functions[f]
-                            break
-                if not defn:
-                    # print("COULD NOT RESOLVE", f)
-                    continue
-                ret_val.append(defn)
-                # defn.dump(0)
-            for cs in s.child_scopes:
-                scope_stack.append(cs)
-                resolve_called_functions(scope_stack, cs, ret_val)
-                scope_stack.pop()
-
-        def fn_to_cypher(fn: Scope) -> str:
-            color = ""
-            if fn.color:
-                color = f":{fn.color}"
-            return f"({fn.alias()}{color})"
-
-        def scope_fns_to_cypher(scope: Scope, first: bool, output: str) -> Tuple[bool, str]:
-            for f in scope.functions:
-                if not first:
-                    output += ",\n  "
-                first = False
-
-                fn = scope.functions[f]
-                output += fn_to_cypher(fn)
-                first, output = scope_fns_to_cypher(fn, first, output)
-            for c in scope.child_scopes:
-                first, output = scope_fns_to_cypher(c, first, output)
-            return (first, output)
-
-        def global_calls_to_cypher(scope: Scope):
-            def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
-                called = []
-                resolve_called_functions([scope], fn, called)
-                for c in called:
-                    output += ",\n  "
-                    output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
-                return output
-            output = ""
-            for f in scope.functions:
-                fn = scope.functions[f]
-                output = scope_calls_to_cypher(scope, fn, output)
-            return output
-        _, output = scope_fns_to_cypher(self._global_scope, True, "")
-        output += global_calls_to_cypher(self._global_scope)
-        return "CREATE " + output
+        return self._global_scope
 
 
 def patternsToCypher(patterns: List[str]) -> List[str]:
@@ -373,11 +378,12 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
 
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
+    tu = index.parse(cpp_file)
     # TODO set compilation db if it exists
-    rainbow = Rainbow(index.parse(cpp_file), prefix, colors)
-    rainbow.process()
+    rainbow = Rainbow(tu, prefix, colors)
+    scope = rainbow.process()
 
-    create_query = rainbow.toCypher()
+    create_query = scope.toCypher()
     validate_queries = patternsToCypher(patterns)
     validate_query = "\n".join(validate_queries)
 
