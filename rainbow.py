@@ -90,32 +90,31 @@ class Scope:
             first, output = c._scope_fns_to_cypher(first, output)
         return (first, output)
 
+    def resolve_function(self, fnname: str) -> Optional["Scope"]:
+        if fnname in self.functions:
+            return self.functions[fnname]
+
+        if fnname in self.params:
+            return Scope.create_function(-2, self, fnname, self.params[fnname], {})
+
+        if not self.parent_scope:
+            return None
+        return self.parent_scope.resolve_function(fnname)
+
     def _calls_to_cypher(self):
-        def resolve_called_functions(
-            scope_stack: List[Scope], s: Scope, ret_val: List[Scope]
-        ):
+        def resolve_called_functions(s: Scope, ret_val: List[Scope]):
             for f in s.called_functions:
-                defn: Optional[Scope] = None
-                if f in s.functions:
-                    defn = s.functions[f]
-                else:
-                    for rev_scope in scope_stack[::-1]:
-                        if f in rev_scope.functions:
-                            defn = rev_scope.functions[f]
-                            break
+                defn = s.resolve_function(f)
                 if not defn:
                     # print("COULD NOT RESOLVE", f)
                     continue
                 ret_val.append(defn)
-                # defn.dump(0)
             for cs in s.child_scopes:
-                scope_stack.append(cs)
-                resolve_called_functions(scope_stack, cs, ret_val)
-                scope_stack.pop()
+                resolve_called_functions(cs, ret_val)
 
-        def scope_calls_to_cypher(scope: Scope, fn: Scope, output: str) -> str:
+        def scope_calls_to_cypher(fn: Scope, output: str) -> str:
             called = []
-            resolve_called_functions([scope], fn, called)
+            resolve_called_functions(fn, called)
             for c in called:
                 output += ",\n  "
                 output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
@@ -124,7 +123,7 @@ class Scope:
         output = ""
         for f in self.functions:
             fn = self.functions[f]
-            output = scope_calls_to_cypher(self, fn, output)
+            output = scope_calls_to_cypher(fn, output)
         return output
 
     def toCypher(self) -> str:

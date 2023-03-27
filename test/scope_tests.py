@@ -92,6 +92,61 @@ class UnitTestScope(unittest.TestCase):
         scope = sut.process()
         assert scope.functions["main"].color == "TEST"
 
+    def testColors(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            COLOR(BLUE) int main() {
+                COLOR(GREEN) int notafunction = 0;
+                return ret0() + notafunction;
+            }
+        """
+        )
+        sut = createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        scope = sut.process()
+
+        assert scope.functions["main"].color == "BLUE"
+        assert len(scope.functions["main"].functions) == 0
+        assert scope.functions["main"].called_functions == ["ret0"]
+        assert len(scope.functions["main"].child_scopes) == 0
+
+        assert scope.functions["ret0"].color == "RED"
+        assert len(scope.functions) == 2
+
+    def testLambdaNameShadowing(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            COLOR(BLUE) int main() {
+                COLOR(GREEN) auto ret0 = []() { return 0; };
+                return ret0();
+            }
+        """
+        )
+        sut = createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        scope = sut.process()
+
+        assert len(scope.functions) == 2
+
+        main_fn = scope.functions["main"]
+        assert main_fn.color == "BLUE"
+        assert len(main_fn.functions) == 1
+        assert main_fn.called_functions == ["ret0"]
+        assert len(main_fn.child_scopes) == 0
+
+        global_ret0 = scope.functions["ret0"]
+        assert global_ret0.color == "RED"
+
+        lambda_ret0 = main_fn.functions["ret0"]
+        assert lambda_ret0.color == "GREEN"
+
+        resolved_ret0 = main_fn.resolve_function("ret0")
+        assert resolved_ret0
+        assert resolved_ret0 != global_ret0
+        assert resolved_ret0 == lambda_ret0
+
 
 if __name__ == "__main__":
     unittest.main()
