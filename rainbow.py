@@ -224,6 +224,8 @@ class Rainbow:
                 CursorKind.PURE_ATTR,
                 CursorKind.SIZE_OF_PACK_EXPR,
                 CursorKind.STRING_LITERAL,
+                CursorKind.TEMPLATE_TYPE_PARAMETER,
+                CursorKind.TEMPLATE_NON_TYPE_PARAMETER,
                 CursorKind.TYPEDEF_DECL,
                 CursorKind.TYPE_ALIAS_DECL,
                 CursorKind.TYPE_ALIAS_TEMPLATE_DECL,
@@ -301,19 +303,10 @@ class Rainbow:
         # body
         return (body, fn)
 
-    def _append_to_frontier(
-        self,
-        node: clang.cindex.Cursor,
-        scope: Scope,
-        frontier: List[Tuple[clang.cindex.Cursor, Scope]],
-    ):
-        for c in list(node.get_children())[::-1]:
-            frontier.append((c, scope))
-
     def _process(self, root: clang.cindex.Cursor, r_scope: Scope):
         frontier = [(root, r_scope)]
         while len(frontier) > 0:
-            node, scope = frontier.pop()
+            node, scope = frontier.pop(0)
             kind = node.kind
             if self.isUnsupported(kind):
                 if kind not in self._seen_unsupported_types:
@@ -332,20 +325,20 @@ class Rainbow:
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
                 scope.child_scopes.append(new_scope)
-                self._append_to_frontier(node, new_scope, frontier)
+                frontier.extend([(c, new_scope) for c in node.get_children()])
                 continue
 
             if fnname := self.isFunction(node, kind):
                 fn_body, fn = self._process_function(fnname, node, scope)
                 if fn_body:
-                    self._append_to_frontier(fn_body, fn, frontier)
+                    frontier.extend([(c, fn) for c in fn_body.get_children()])
                 continue
 
             if called := self.isCall(node):
                 scope.register_call(called)
                 continue
 
-            self._append_to_frontier(node, scope, frontier)
+            frontier.extend([(c, scope) for c in node.get_children()])
 
     def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""
