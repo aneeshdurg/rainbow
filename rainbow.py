@@ -68,7 +68,7 @@ class Scope:
 
     def alias(self) -> str:
         assert self.name
-        return f"{self.name}__{self.id_}"
+        return f"`{self.name}__{self.id_}`"
 
     def _scope_fns_to_cypher(self, first: bool, output: str) -> Tuple[bool, str]:
         def fn_to_cypher(fn: Scope) -> str:
@@ -132,7 +132,7 @@ class Scope:
 
         _, output = self._scope_fns_to_cypher(True, "")
         output += self._calls_to_cypher()
-        return "CREATE " + output
+        return "CREATE " + output + "\n;"
 
 
 @dataclass
@@ -272,6 +272,8 @@ class Rainbow:
                             )
                         param_color = color
                 if param_color:
+                    # TODO
+                    raise Exception(f"COLORED PARAMETER UNSUPPORTED")
                     params[param_name] = param_color
             elif self.isScope(c.kind):
                 if body is not None:
