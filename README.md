@@ -79,7 +79,7 @@ validity of this example. To run `rainbow`, use the command:
 # You need to build `libclang.so` from https://github.com/llvm/llvm-project
 # The path to the build library is stored in this variable for this example
 LLVM_LIB_PATH= ~/llvm-project/build/lib/libclang.so
-./rainbow.py examples/test.cpp examples/patterns.txt -c $LLVM_LIB_PATH
+python3 -m rainbow examples/test.cpp examples/patterns.txt -c $LLVM_LIB_PATH
 ```
 
 And it should output:
