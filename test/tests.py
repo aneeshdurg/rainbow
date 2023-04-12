@@ -9,21 +9,19 @@ from spycy import spycy
 import clang.cindex
 from rainbow import rainbow
 
+assert "CLANG_LIB_PATH" in os.environ
+clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
+
 
 class UnitTestRainbow(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        assert "CLANG_LIB_PATH" in os.environ
-        clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
-
     def testIsFunction(self):
         sut = rainbow.Rainbow(MagicMock(), "", [])
 
         node = MagicMock()
-        assert sut.isFunction(node) is None
+        assert sut.isFunction(node, node.kind) is None
 
         node = MagicMock(kind=clang.cindex.CursorKind.FUNCTION_DECL)
-        assert sut.isFunction(node) == node.spelling
+        assert sut.isFunction(node, node.kind) == node.spelling
 
     def testNoPrefix(self):
         with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
@@ -90,11 +88,6 @@ class UnitTestRainbow(unittest.TestCase):
 
 
 class CypherTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        assert "CLANG_LIB_PATH" in os.environ
-        clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
-
     def setUp(self):
         self.executor = spycy.CypherExecutor()
 
@@ -117,12 +110,10 @@ class CypherTests(unittest.TestCase):
             sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
             scope = sut.process()
             create_query = scope.toCypher()
-            print(create_query)
             self.executor.exec(create_query)
             result = self.executor.exec(
                 "MATCH (a)-->(b) return a.name, labels(a), b.name, labels(b)",
             )
-            print(result)
             self.assertEqual(result["a.name"][0], "main")
             self.assertEqual(result["labels(a)"][0], ["RED"])
             self.assertEqual(result["b.name"][0], "ret0")
