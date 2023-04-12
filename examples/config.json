@@ -8,5 +8,5 @@
     "(:GREEN)-[:CALLS*]->(:RED)",
     "(:YELLOW)-->(x) WHERE NOT x:YELLOW"
   ],
-  "executor": "executors/noop_adapter.sh"
+  "executor": "examples/executors/noop_adapter.sh"
 }

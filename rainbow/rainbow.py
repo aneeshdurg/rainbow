@@ -75,7 +75,7 @@ class Scope:
             color = ""
             if fn.color:
                 color = f":{fn.color}"
-            return f"({fn.alias()}{color})"
+            return f"({fn.alias()}{color} {{name: '{fn.name}'}})"
 
         for f in self.functions:
             if not first:
@@ -402,14 +402,3 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
             exitcode = 1
     print("program is invalid:", invalidcalls, file=sys.stderr)
     sys.exit(exitcode)
-
-
-if __name__ == "__main__":
-    import os
-
-    if "RAINBOW_PROFILE" in os.environ:
-        import cProfile
-
-        cProfile.run("main()")
-        sys.exit(0)
-    main()

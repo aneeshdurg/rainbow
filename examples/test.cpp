@@ -10,11 +10,11 @@
 
 typedef void (*VFn)(void);
 
-[[COLOR(RED)]] void unused([[COLOR(BLUE)]] std::function<void()> my_fn,
-                           [[COLOR(BLUE)]] VFn my_fn_2) {
-  my_fn();
-  my_fn_2();
-}
+// [[COLOR(RED)]] void unused([[COLOR(BLUE)]] std::function<void()> my_fn,
+//                            [[COLOR(BLUE)]] VFn my_fn_2) {
+//   my_fn();
+//   my_fn_2();
+// }
 
 [[COLOR(BLUE)]] void idk() {}
 
@@ -23,7 +23,7 @@ typedef void (*VFn)(void);
   printf("!!! %d\n", r);
 
   auto BlueFn = []() {};
-  unused(BlueFn, idk);
+  // unused(BlueFn, idk);
 
   {
     [[COLOR(YELLOW)]] auto WrapperFn1 = []() { return ret0(); };

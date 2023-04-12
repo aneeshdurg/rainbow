@@ -2,3 +2,24 @@
 exclude = ["**/__pycache__"]
 pythonVersion = "3.9"
 pythonPlatform = "Linux"
+
+[tool.setuptools]
+packages = ["rainbow"]
+
+[project]
+name = "rainbow_aneeshdurg"
+version = "0.0.1"
+authors = [
+  { name="Aneesh Durg", email="aneeshdurg17@gmail.com" },
+]
+description = "C/C++ call-graph validation tool"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "spycy_aneeshdurg @ https://aneeshdurg.me/spycy/dist/spycy_aneeshdurg-0.0.1-py3-none-any.whl ",
+]

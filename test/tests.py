@@ -4,11 +4,10 @@ import textwrap
 import unittest
 from unittest.mock import MagicMock
 
-from neo4j import GraphDatabase
+from spycy import spycy
 
 import clang.cindex
-import rainbow
-from executors.neo4j_adapter import execute_query
+from rainbow import rainbow
 
 
 class UnitTestRainbow(unittest.TestCase):
@@ -90,33 +89,17 @@ class UnitTestRainbow(unittest.TestCase):
     #         self.assertEqual(expected, sut.toCypher())
 
 
-def deleteAllNodes(session):
-    execute_query(session, "MATCH (a) DETACH DELETE a")
-
-
 class CypherTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         assert "CLANG_LIB_PATH" in os.environ
         clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
-        assert "NEO4J_ADDRESS" in os.environ
-        assert "NEO4J_USERNAME" in os.environ
-        assert "NEO4J_PASSWORD" in os.environ
 
     def setUp(self):
-        uri = os.environ["NEO4J_ADDRESS"]
-        username = os.environ["NEO4J_USERNAME"]
-        password = os.environ["NEO4J_PASSWORD"]
-
-        self.driver = GraphDatabase.driver(uri, auth=(username, password))
-        with self.driver.session() as session:
-            deleteAllNodes(session)
+        self.executor = spycy.CypherExecutor()
 
     def tearDown(self):
-        with self.driver.session() as session:
-            deleteAllNodes(session)
-        self.driver.close()
-        del self.driver
+        del self.executor
 
     def testCallGraph(self):
         with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
@@ -132,18 +115,18 @@ class CypherTests(unittest.TestCase):
 
             index = clang.cindex.Index.create()
             sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
-            sut.process()
-            create_query = sut.toCypher()
-            with self.driver.session() as session:
-                execute_query(session, create_query)
-                result = execute_query(
-                    session,
-                    "MATCH (a)-->(b) return a.name, labels(a), b.name, labels(b)",
-                )
-                self.assertEqual(result["a.name"][0], "main")
-                self.assertEqual(result["labels(a)"][0], ["RED"])
-                self.assertEqual(result["b.name"][0], "ret0")
-                self.assertEqual(result["labels(b)"][0], ["BLUE"])
+            scope = sut.process()
+            create_query = scope.toCypher()
+            print(create_query)
+            self.executor.exec(create_query)
+            result = self.executor.exec(
+                "MATCH (a)-->(b) return a.name, labels(a), b.name, labels(b)",
+            )
+            print(result)
+            self.assertEqual(result["a.name"][0], "main")
+            self.assertEqual(result["labels(a)"][0], ["RED"])
+            self.assertEqual(result["b.name"][0], "ret0")
+            self.assertEqual(result["labels(b)"][0], ["BLUE"])
 
 
 if __name__ == "__main__":

@@ -1,2 +1,4 @@
 clang
 __pycache__/
+dist/
+rainbow_aneeshdurg.egg_info/
