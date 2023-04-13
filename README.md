@@ -1,5 +1,7 @@
 # Rainbow - arbitrary function coloring in CPP
 
+![CI Status](https://github.com/aneeshdurg/rainbow/actions/workflows/test.yml/badge.svg)
+
 This project aims to implement arbitrary function coloring rules within CPP.
 This is accomplished by using clang's Annotate Attribute, and allowing the user
 to supply cypher patterns to reject call graphs that violate coloring
