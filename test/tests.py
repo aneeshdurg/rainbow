@@ -5,12 +5,10 @@ import unittest
 from unittest.mock import MagicMock
 
 import clang.cindex
+import utils
 from spycy import spycy
 
 from rainbow import rainbow
-
-lib_path = "/usr/lib/x86_64-linux-gnu/libclang-15.so.1"
-clang.cindex.Config.set_library_file(os.environ.get("CLANG_LIB_PATH", lib_path))
 
 
 class UnitTestRainbow(unittest.TestCase):
@@ -18,10 +16,10 @@ class UnitTestRainbow(unittest.TestCase):
         sut = rainbow.Rainbow(MagicMock(), "", [])
 
         node = MagicMock()
-        assert sut.isFunction(node, node.kind) is None
+        assert sut.is_function(node, node.kind) is None
 
         node = MagicMock(kind=clang.cindex.CursorKind.FUNCTION_DECL)
-        assert sut.isFunction(node, node.kind) == node.spelling
+        assert sut.is_function(node, node.kind) == node.spelling
 
     def testNoPrefix(self):
         with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
@@ -58,34 +56,6 @@ class UnitTestRainbow(unittest.TestCase):
             with self.assertRaisesRegex(Exception, ".*unknown color.*"):
                 sut.process()
 
-    # def testNoTaggedFunctions(self):
-    #     with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
-    #         f.write(textwrap.dedent("""\
-    #                 int ret1 { return 1; }
-    #                 int main() { return 0; }
-    #         """).encode())
-    #         f.flush()
-
-    #         index = clang.cindex.Index.create()
-    #         sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
-    #         sut.process()
-    #         expected = "// no tagged function calls\n;\n"
-    #         self.assertEqual(expected, sut.toCypher())
-
-    # def testNoTaggedFunctionCalls(self):
-    #     with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
-    #         f.write(textwrap.dedent("""\
-    #                 int ret0() { return 0; }
-    #                 int main() { return ret0(); }
-    #         """).encode())
-    #         f.flush()
-
-    #         index = clang.cindex.Index.create()
-    #         sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
-    #         sut.process()
-    #         expected = "// no tagged function calls\n;\n"
-    #         self.assertEqual(expected, sut.toCypher())
-
 
 class CypherTests(unittest.TestCase):
     def setUp(self):
@@ -109,7 +79,7 @@ class CypherTests(unittest.TestCase):
             index = clang.cindex.Index.create()
             sut = rainbow.Rainbow(index.parse(f.name), "COLOR::", ["RED", "BLUE"])
             scope = sut.process()
-            create_query = scope.toCypher()
+            create_query = scope.to_cypher()
             self.executor.exec(create_query)
             result = self.executor.exec(
                 "MATCH (a)-->(b) return a.name, labels(a), b.name, labels(b)",
@@ -121,4 +91,4 @@ class CypherTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    utils.main()

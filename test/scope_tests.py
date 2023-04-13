@@ -1,17 +1,10 @@
-import os
 import textwrap
 import unittest
-from test.utils import createRainbow
 
-import clang.cindex
+import utils
 
 
 class UnitTestScope(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        assert "CLANG_LIB_PATH" in os.environ
-        clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
-
     def testTrivial(self):
         src = textwrap.dedent(
             """\
@@ -20,7 +13,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [])
         scope = sut.process()
 
         assert scope.color is None
@@ -39,7 +32,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [])
         scope = sut.process()
 
         assert len(scope.functions) == 1
@@ -60,7 +53,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [])
         scope = sut.process()
 
         assert "main" in scope.functions
@@ -77,7 +70,7 @@ class UnitTestScope(unittest.TestCase):
         assert main_fn.called_functions == ["fn1", "fn2", "fn3"]
 
     def testBasicColor(self):
-        sut = createRainbow(
+        sut = utils.createRainbow(
             """[[clang::annotate("TEST")]] int main() { return 0; }""", "", ["TEST"]
         )
         scope = sut.process()
@@ -94,7 +87,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"])
         scope = sut.process()
 
         assert scope.functions["main"].color == "BLUE"
@@ -116,7 +109,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"])
         scope = sut.process()
 
         assert len(scope.functions) == 2
@@ -140,4 +133,4 @@ class UnitTestScope(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    utils.main()

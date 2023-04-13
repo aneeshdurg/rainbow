@@ -25,3 +25,4 @@ jobs:
       - name: "run tests"
         run: |
           python3 test/tests.py
+          python3 test/scope_tests.py

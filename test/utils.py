@@ -1,4 +1,6 @@
+import os
 import tempfile
+import unittest
 from typing import List
 
 import clang.cindex
@@ -13,3 +15,9 @@ def createRainbow(input_: str, prefix: str, colors: List[str]) -> rainbow.Rainbo
         index = clang.cindex.Index.create()
         tu = index.parse(f.name)
         return rainbow.Rainbow(tu, prefix, colors)
+
+
+def main():
+    lib_path = "/usr/lib/x86_64-linux-gnu/libclang-15.so.1"
+    clang.cindex.Config.set_library_file(os.environ.get("CLANG_LIB_PATH", lib_path))
+    unittest.main()
