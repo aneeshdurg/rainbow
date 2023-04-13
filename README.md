@@ -10,8 +10,13 @@ restrictions.
 ## Installation
 
 ```bash
+# Install clang-15
 sudo apt update
 sudo apt install clang-15
+
+# Clone and install rainbow
+git clone https://github.com/aneeshdurg/rainbow.git
+cd rainbow
 pip install .
 ```
 
