@@ -1,0 +1,27 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test Rainbow
+    runs-on: ubuntu-latest
+    steps:
+      - name: "checkout repository"
+        uses: actions/checkout@v2
+
+      - name: "install deps"
+        run: |
+          sudo apt update
+          sudo apt install clang-15
+          ls /usr/lib/x86_64-linux-gnu/ | grep libclang
+          pip install build
+          python3 -m build
+          pip install dist/*.whl
+
+      - name: "run tests"
+        run: |
+          python3 test/tests.py
