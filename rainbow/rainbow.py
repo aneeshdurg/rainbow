@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import logging
 import subprocess
 import sys
 from dataclasses import MISSING, dataclass, field
@@ -105,7 +106,6 @@ class Scope:
             for f in s.called_functions:
                 defn = s.resolve_function(f)
                 if not defn:
-                    # print("COULD NOT RESOLVE", f)
                     continue
                 ret_val.append(defn)
             for cs in s.child_scopes:
@@ -346,7 +346,7 @@ class Rainbow:
             if self.isUnsupported(kind):
                 if kind not in self._seen_unsupported_types:
                     self._seen_unsupported_types.add(kind)
-                    print("Warning unsupported node type", kind, file=sys.stderr)
+                    logging.warn("unsupported node type %s" % kind)
                 continue
 
             if self.isSkipped(kind):
