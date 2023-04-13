@@ -5,18 +5,18 @@ This is accomplished by using clang's Annotate Attribute, and allowing the user
 to supply cypher patterns to reject call graphs that violate coloring
 restrictions.
 
-## Requirements
-TODO write better instructions
+## Installation
 
-+ Build [clang](https://github.com/llvm/llvm-project)
-+ Include the clang python module in your `PYTHONPATH`
-  + The module can be found at `$LLVM_PROJECT/clang/bindings/python/clang`
-
+```bash
+sudo apt update
+sudo apt install clang-15
+pip install .
+```
 
 ## Example
 
 Let's walk through a simple example of how `rainbow` can be used.
-First, let us look at `examples/config.json`.
+First, let us look at an exaple configuration.
 
 ```json
 {
@@ -51,7 +51,7 @@ function that isn't also `YELLOW`.
 in `c++`. This helps prevent against collision if using multiple sets of colors
 that all model different semantics.
 
-Next, let us look at the contents of `examples/test.cpp`.
+Next, let us look at a sample program.
 
 ```cpp
 #include <stdio.h>
@@ -76,30 +76,50 @@ Now we can run `rainbow` to generate a cypher program that determines the
 validity of this example. To run `rainbow`, use the command:
 
 ```bash
-# You need to build `libclang.so` from https://github.com/llvm/llvm-project
-# The path to the build library is stored in this variable for this example
-LLVM_LIB_PATH= ~/llvm-project/build/lib/libclang.so
-python3 -m rainbow examples/test.cpp examples/patterns.txt -c $LLVM_LIB_PATH
+python3 -m rainbow <path_to_source>.cpp <path_to_config>.json
 ```
 
 And it should output:
 
-```cypher
-CREATE
-  (printf),
-  (ret0 :BLUE),
-  (main :RED),
-  (main)-[:CALLs]->(printf),
-  (main)-[:CALLs]->(ret0),
- (sentinel)
-;
-OPTIONAL MATCH (:RED)-[:CALLS*]->(:BLUE) WITH *, count(*) > 0 as invalidcalls0
-OPTIONAL MATCH (:GREEN)-[:CALLS*]->(:RED) WITH *, count(*) > 1 as invalidcalls1
-OPTIONAL MATCH (:YELLOW)-->(x) WHERE NOT x:YELLOW WITH *, count(*) > 1 as invalidcalls2
-RETURN invalidcalls0 OR invalidcalls1 OR invalidcalls2 as invalidcalls
-;
+```
+program is invalid: True
 ```
 
-Here we see the call graph modelled as a `CREATE` statement, and our patterns
-compiled together in a single `openCypher` query that will output a variable
-that will store `true` if the program should be rejected and `false` otherwise.
+If you open `examples/test.cpp` and `examples/config.json`, you will see a more
+involved example for an invalid program, with comments detailing how to make the
+program valid.
+
+### Executors
+
+Executors are backends that handle the openCypher execution. By default, the
+executor is implemented as direct calls to [sPyCy](https://github.com/aneeshdurg/spycy).
+However, the `examples` directory contains alternate executors such as a
+[Neo4j](https://github.com/neo4j/neo4j) executor and a executor that echoes the
+queries to stdout. Try using the `echo` executor with:
+
+```bash
+python3 -m rainbow examples/test.cpp examples/config_echo.json
+```
+
+and you should see:
+
+```cypher
+CREATE (`printf__1`:PURPLE {name: 'printf'}),
+  ...
+  (`ret_wrapper__3`) -[:CALLS]-> (`ret0__2`),
+  (`main__4`) -[:CALLS]-> (`printf__1`),
+  (`main__4`) -[:CALLS]-> (`WrapperFn1__38`),
+  (`main__4`) -[:CALLS]-> (`WrapperFn1__39`),
+  (`main__4`) -[:CALLS]-> (`ret_wrapper__3`),
+  (`main__4`) -[:CALLS]-> (`ret0__2`),
+  (`WrapperFn1__38`) -[:CALLS]-> (`ret0__2`),
+  (`WrapperFn1__39`) -[:CALLS]-> (`ret0__2`)
+;
+MATCH p = (:RED)-[:CALLS*]->(:BLUE) WHERE NOT any(n in nodes(p) WHERE n:PURPLE) RETURN count(*) > 0 as invalidcalls;
+MATCH (:GREEN)-[:CALLS*]->(:RED) RETURN count(*) > 0 as invalidcalls;
+MATCH (:YELLOW)-->(x) WHERE NOT x:YELLOW RETURN count(*) > 0 as invalidcalls
+program is invalid: UNKNOWN
+```
+
+Here you can see the call graph modeled as a `CREATE` statement, and the
+patterns assembled into full queries.

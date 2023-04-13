@@ -2,9 +2,8 @@
 from pathlib import Path
 from typing import Optional
 
-import click
-
 import clang.cindex
+import click
 
 
 def dump_ast(tu: clang.cindex.TranslationUnit):

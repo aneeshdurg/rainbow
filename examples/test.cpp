@@ -8,23 +8,11 @@
 [[COLOR(BLUE)]] int ret0() { return 0; };
 [[COLOR(PURPLE)]] int ret_wrapper() { return ret0(); };
 
-typedef void (*VFn)(void);
-
-// [[COLOR(RED)]] void unused([[COLOR(BLUE)]] std::function<void()> my_fn,
-//                            [[COLOR(BLUE)]] VFn my_fn_2) {
-//   my_fn();
-//   my_fn_2();
-// }
-
-[[COLOR(BLUE)]] void idk() {}
-
 [[COLOR(RED)]] int main() {
   [[COLOR(GREEN)]] int r = 0;
   printf("!!! %d\n", r);
 
-  auto BlueFn = []() {};
-  // unused(BlueFn, idk);
-
+  // This block is invalid
   {
     [[COLOR(YELLOW)]] auto WrapperFn1 = []() { return ret0(); };
     WrapperFn1();
@@ -39,7 +27,10 @@ typedef void (*VFn)(void);
     [[COLOR(PURPLE)]] auto WrapperFn1 = []() { return ret0(); };
     (void)WrapperFn1();
 
-    return ret_wrapper() + ret0(); // + WrapperFn();
+    // To make this program valid - uncomment the following and remove the
+    // original return statement.
+    // return ret_wrapper() + WrapperFn1();
+    return ret_wrapper() + ret0();
   }
   return 0;
 }

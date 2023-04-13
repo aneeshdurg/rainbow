@@ -4,13 +4,13 @@ import textwrap
 import unittest
 from unittest.mock import MagicMock
 
+import clang.cindex
 from spycy import spycy
 
-import clang.cindex
 from rainbow import rainbow
 
-assert "CLANG_LIB_PATH" in os.environ
-clang.cindex.Config.set_library_file(os.environ["CLANG_LIB_PATH"])
+lib_path = "/usr/lib/x86_64-linux-gnu/libclang-15.so.1"
+clang.cindex.Config.set_library_file(os.environ.get("CLANG_LIB_PATH", lib_path))
 
 
 class UnitTestRainbow(unittest.TestCase):

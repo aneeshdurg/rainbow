@@ -21,5 +21,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "libclang==15.0.6.1",
     "spycy_aneeshdurg @ https://aneeshdurg.me/spycy/dist/spycy_aneeshdurg-0.0.1-py3-none-any.whl ",
 ]
