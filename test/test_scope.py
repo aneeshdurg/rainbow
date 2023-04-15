@@ -168,7 +168,7 @@ class TestScopeToCypher(unittest.TestCase):
 class TestRainbowScopeConstruction(unittest.TestCase):
     """Test that Rainbow correctly models C++ as Scope"""
 
-    def testTrivial(self):
+    def test_trivial(self):
         src = textwrap.dedent(
             """\
             int main() {
@@ -187,7 +187,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert main_fn.color is None
         assert len(main_fn.called_functions) == 0
 
-    def testRecursiveCallGraph(self):
+    def test_recursive_call_graph(self):
         src = textwrap.dedent(
             """\
             int main() {
@@ -202,7 +202,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         main_fn = scope.functions["main"]
         assert main_fn.called_functions == ["main"]
 
-    def testBasicCallGraph(self):
+    def test_basic_call_Graph(self):
         src = textwrap.dedent(
             """\
             void fn1() {}
@@ -232,14 +232,14 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert len(main_fn.child_scopes) == 0
         assert main_fn.called_functions == ["fn1", "fn2", "fn3"]
 
-    def testBasicColor(self):
+    def test_basic_color(self):
         sut = utils.createRainbow(
             """[[clang::annotate("TEST")]] int main() { return 0; }""", "", ["TEST"], []
         )
         scope = sut.process()
         assert scope.functions["main"].color == "TEST"
 
-    def testColors(self):
+    def test_colors(self):
         src = textwrap.dedent(
             """\
             #define COLOR(X) [[clang::annotate(#X)]]
@@ -261,7 +261,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert scope.functions["ret0"].color == "RED"
         assert len(scope.functions) == 2
 
-    def testLambdaNameShadowing(self):
+    def test_lambda_name_shadowing(self):
         src = textwrap.dedent(
             """\
             #define COLOR(X) [[clang::annotate(#X)]]

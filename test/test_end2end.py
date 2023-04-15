@@ -5,7 +5,7 @@ import utils
 
 
 class End2EndTests(unittest.TestCase):
-    def testNoAnnotations(self):
+    def test_no_annotations(self):
         src = textwrap.dedent(
             """\
                 int ret0() { return 0; }
@@ -16,7 +16,7 @@ class End2EndTests(unittest.TestCase):
         # Should always accept
         assert not sut.run()
 
-    def testBasicAccept(self):
+    def test_basic_accept(self):
         src = textwrap.dedent(
             """\
                 #define COLOR(X) [[clang::annotate(#X)]]
@@ -27,7 +27,7 @@ class End2EndTests(unittest.TestCase):
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
         assert not sut.run()
 
-    def testBasicReject(self):
+    def test_basic_reject(self):
         src = textwrap.dedent(
             """\
                 #define COLOR(X) [[clang::annotate(#X)]]
@@ -37,3 +37,7 @@ class End2EndTests(unittest.TestCase):
         )
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
         assert sut.run()
+
+
+if __name__ == "__main__":
+    utils.main()
