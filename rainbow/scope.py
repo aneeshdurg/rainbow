@@ -33,6 +33,7 @@ class Scope:
         fs.name = name
         fs.color = color
         fs.params = params
+        parent.functions[name] = fs
         return fs
 
     def register_call(self, fnname: str):
@@ -82,6 +83,9 @@ class Scope:
         return (first, output)
 
     def resolve_function(self, fnname: str) -> Optional["Scope"]:
+        if self.name and self.name == fnname:
+            return self
+
         if fnname in self.functions:
             return self.functions[fnname]
 
@@ -133,4 +137,6 @@ class Scope:
 
         _, output = self._scope_fns_to_cypher(True, "")
         output += self._calls_to_cypher()
+        if output == "":
+            return "RETURN 0\n;"
         return "CREATE " + output + "\n;"

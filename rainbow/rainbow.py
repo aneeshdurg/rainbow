@@ -203,7 +203,6 @@ class Rainbow:
         else:
             scope_id = self._get_new_scope_id()
             fn = Scope.create_function(scope_id, scope, fnname, fn_color, params)
-            scope.functions[fnname] = fn
 
         # This might just be a declaration, so there might not be a function
         # body
