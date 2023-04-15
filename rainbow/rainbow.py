@@ -251,6 +251,15 @@ class Rainbow:
         self._process(self.tu.cursor, self._global_scope)
         return self._global_scope
 
+    def should_reject(self) -> Optional[bool]:
+        return self.config.run(self._global_scope)
+
+    def run(self) -> Optional[bool]:
+        """Returns True if the program should be rejected, False if it should be
+        accepted, and None if the validity was not reported"""
+        self.process()
+        return self.should_reject()
+
 
 @click.command(help="rainbow - arbitrary function coloring for c++!")
 @click.argument("cpp_file")
@@ -267,8 +276,7 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     tu = index.parse(cpp_file)
     # TODO set compilation db if it exists
     rainbow = Rainbow(tu, config)
-    scope = rainbow.process()
-    found_invalid = config.run(scope)
+    found_invalid = rainbow.run()
 
     if found_invalid is None:
         invalidcalls = "UNKNOWN"

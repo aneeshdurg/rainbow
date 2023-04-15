@@ -1,3 +1,5 @@
+import os
+import tempfile
 import textwrap
 import unittest
 from unittest.mock import MagicMock
@@ -5,6 +7,8 @@ from unittest.mock import MagicMock
 import clang.cindex
 import utils
 from spycy import spycy
+
+from rainbow import rainbow
 
 
 class UnitTestRainbow(unittest.TestCase):
@@ -66,6 +70,29 @@ class CypherTests(unittest.TestCase):
         self.assertEqual(result["labels(a)"][0], ["RED"])
         self.assertEqual(result["b.name"][0], "ret0")
         self.assertEqual(result["labels(b)"][0], ["BLUE"])
+
+
+class End2EndTests(unittest.TestCase):
+    def testNoAnnotations(self):
+        src = textwrap.dedent(
+            """\
+                int ret0() { return 0; }
+                int main() { return ret0(); }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
+        assert not sut.run()
+
+    def testBasicReject(self):
+        src = textwrap.dedent(
+            """\
+                #define COLOR(X) [[clang::annotate(#X)]]
+                COLOR(BLUE) int ret0() { return 0; }
+                COLOR(RED) int main() { return ret0(); }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
+        assert sut.run()
 
 
 if __name__ == "__main__":
