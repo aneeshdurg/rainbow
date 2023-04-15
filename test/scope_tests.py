@@ -13,7 +13,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = utils.createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [], [])
         scope = sut.process()
 
         assert scope.color is None
@@ -32,7 +32,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = utils.createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [], [])
         scope = sut.process()
 
         assert len(scope.functions) == 1
@@ -53,7 +53,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = utils.createRainbow(src, "", [])
+        sut = utils.createRainbow(src, "", [], [])
         scope = sut.process()
 
         assert "main" in scope.functions
@@ -71,7 +71,7 @@ class UnitTestScope(unittest.TestCase):
 
     def testBasicColor(self):
         sut = utils.createRainbow(
-            """[[clang::annotate("TEST")]] int main() { return 0; }""", "", ["TEST"]
+            """[[clang::annotate("TEST")]] int main() { return 0; }""", "", ["TEST"], []
         )
         scope = sut.process()
         assert scope.functions["main"].color == "TEST"
@@ -87,7 +87,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"], [])
         scope = sut.process()
 
         assert scope.functions["main"].color == "BLUE"
@@ -109,7 +109,7 @@ class UnitTestScope(unittest.TestCase):
             }
         """
         )
-        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"])
+        sut = utils.createRainbow(src, "", ["RED", "BLUE", "GREEN"], [])
         scope = sut.process()
 
         assert len(scope.functions) == 2

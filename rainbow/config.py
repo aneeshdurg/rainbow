@@ -22,7 +22,7 @@ def get_list_of_strings(config: Dict[str, Any], key: str) -> List[str]:
     if key not in config:
         raise AssertionError(f"Expected list of {key} in config")
     result = config[key]
-    if not isinstance(result, list) or not len(result):
+    if not isinstance(result, list):
         raise AssertionError(f"Expected list of {key} in config")
     for value in result:
         if not isinstance(value, str):
@@ -49,10 +49,8 @@ class Config:
     executor: Optional[Path] = None
 
     @classmethod
-    def from_json(cls, source: Path) -> "Config":
-        """Convert a JSON file to a config"""
-        with source.open() as f:
-            config = json.load(f)
+    def from_dict(cls, source: Path, config: Dict[str, Any]) -> "Config":
+        """Convert a dictionary to a config"""
         colors = get_list_of_strings(config, "colors")
         patterns = get_list_of_strings(config, "patterns")
 
@@ -67,6 +65,13 @@ class Config:
             result.executor = executor
 
         return result
+
+    @classmethod
+    def from_json(cls, source: Path) -> "Config":
+        """Convert a JSON file to a config"""
+        with source.open() as f:
+            config = json.load(f)
+        return Config.from_dict(source, config)
 
     def spycy_executor(self, create_query: str) -> bool:
         """Evaluate queries using sPyCy"""

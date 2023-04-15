@@ -19,8 +19,7 @@ from rainbow.scope import Scope
 @dataclass
 class Rainbow:
     tu: clang.cindex.TranslationUnit
-    prefix: str
-    colors: List[str]
+    config: Config
 
     _global_scope: Scope = field(default_factory=Scope.create_root)
     _scope_id_vendor: int = 0
@@ -93,9 +92,9 @@ class Rainbow:
     def is_color(self, node: clang.cindex.Cursor) -> Optional[str]:
         """Determine if `node` is a tag defining a color"""
         if node.kind == CursorKind.ANNOTATE_ATTR:
-            if node.spelling.startswith(self.prefix):
-                color = node.spelling[len(self.prefix) :]
-                if color not in self.colors:
+            if node.spelling.startswith(self.config.prefix):
+                color = node.spelling[len(self.config.prefix) :]
+                if color not in self.config.colors:
                     raise Exception(f"Found unknown color {color}")
                 return color
         return None
@@ -267,7 +266,7 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     index = clang.cindex.Index.create()
     tu = index.parse(cpp_file)
     # TODO set compilation db if it exists
-    rainbow = Rainbow(tu, config.prefix, config.colors)
+    rainbow = Rainbow(tu, config)
     scope = rainbow.process()
     found_invalid = config.run(scope)
 

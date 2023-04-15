@@ -1,20 +1,27 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from typing import List
 
 import clang.cindex
 
 from rainbow import rainbow
+from rainbow.config import Config
 
 
-def createRainbow(input_: str, prefix: str, colors: List[str]) -> rainbow.Rainbow:
+def createRainbow(
+    input_: str, prefix: str, colors: List[str], patterns: List[str]
+) -> rainbow.Rainbow:
     with tempfile.NamedTemporaryFile(suffix=".cpp") as f:
         f.write(input_.encode())
         f.flush()
         index = clang.cindex.Index.create()
         tu = index.parse(f.name)
-        return rainbow.Rainbow(tu, prefix, colors)
+        config = Config.from_dict(
+            Path("."), {"prefix": prefix, "colors": colors, "patterns": patterns}
+        )
+        return rainbow.Rainbow(tu, config)
 
 
 def main():
