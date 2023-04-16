@@ -38,6 +38,22 @@ class End2EndTests(unittest.TestCase):
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
         assert sut.run()
 
+    # Expected fail because parameters verification not implemented
+    @unittest.expectedFailure
+    def test_reject_parameter_mismatch(self):
+        src = textwrap.dedent(
+            """\
+                #define COLOR(X) [[clang::annotate(#X)]]
+                int ret0(COLOR(RED) std::function<int(void)> cb) { return cb(); }
+                int main() {
+                    COLOR(BLUE) auto cb = []() { return 0; };
+                    return ret0(cb);
+                }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
+        assert sut.run()
+
 
 if __name__ == "__main__":
     utils.main()

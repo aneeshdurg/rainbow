@@ -85,7 +85,10 @@ class UnitTestScope(unittest.TestCase):
     def test_resolve_parameter(self):
         root = Scope.create_root()
         fn1 = Scope.create_function(1, root, "fn1", None, {"param0": "RED"})
-        assert fn1.resolve_function("param0") is not None
+
+        assert "param0" in fn1.params
+        assert fn1.params["param0"].is_param == True
+        assert fn1.resolve_function("param0") is fn1.params["param0"]
 
 
 class TestScopeToCypher(unittest.TestCase):
@@ -163,6 +166,22 @@ class TestScopeToCypher(unittest.TestCase):
         assert result["a.name"][1] == "fn2"
         assert result["b.name"][1] == "fn3"
         assert result["bcolor"][1] == "BLUE"
+
+    def test_params(self):
+        root = Scope.create_root()
+        fn1 = Scope.create_function(1, root, "fn1", "GREEN", {"fn2": None})
+        Scope.create_function(2, root, "fn2", "GREEN", {})
+        fn1.register_call("fn2")  # should resolve to parameter
+
+        self.executor.exec(root.to_cypher())
+        result = self.executor.exec(
+            "MATCH (a)-->(b {name: 'fn2'}) RETURN a.name, b.name, labels(b) as bcolors"
+        )
+
+        assert len(result) == 1
+        assert result["a.name"][0] == "fn1"
+        assert result["b.name"][0] == "fn2"
+        assert result["bcolors"][0] == []
 
 
 class TestRainbowScopeConstruction(unittest.TestCase):

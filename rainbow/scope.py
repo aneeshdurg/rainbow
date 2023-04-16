@@ -14,7 +14,16 @@ class Scope:
     # Fields that are only relevant if the Scope is a function
     name: Optional[str] = None
     color: Optional[str] = None
-    params: Dict[str, str] = field(default_factory=dict)
+    params_to_colors: Dict[str, Optional[str]] = field(default_factory=dict)
+    is_param: bool = False
+
+    params: Dict[str, "Scope"] = field(init=False)
+
+    def __post_init__(self):
+        params = {}
+        for param, pcolor in self.params_to_colors.items():
+            params[param] = Scope.create_param(self.id_, self, param, pcolor)
+        self.params = params
 
     @classmethod
     def create_root(cls) -> "Scope":
@@ -27,14 +36,17 @@ class Scope:
         parent: "Scope",
         name: str,
         color: Optional[str],
-        params: Dict[str, str],
+        params: Dict[str, Optional[str]],
     ) -> "Scope":
-        fs = Scope(id_, parent)
-        fs.name = name
-        fs.color = color
-        fs.params = params
+        fs = Scope(id_, parent, name=name, color=color, params_to_colors=params)
         parent.functions[name] = fs
         return fs
+
+    @classmethod
+    def create_param(
+        cls, id_: int, parent: "Scope", name: str, color: Optional[str]
+    ) -> "Scope":
+        return Scope(id_, parent, name=name, color=color, is_param=True)
 
     def register_call(self, fnname: str):
         self.called_functions.append(fnname)
@@ -43,7 +55,10 @@ class Scope:
         prefix = " " * (2 * level)
         print("{", self.id_)
         print(prefix, "  Color:", self.color)
-        print(prefix, "  Params:", self.params)
+        print(prefix, "  Params:")
+        for param, pscope in self.params:
+            print(prefix, f"  {param}:", end=" ")
+            pscope.dump(level + 2)
         print(prefix, "  Functions")
         for f in self.functions:
             fn = self.functions[f]
@@ -60,14 +75,26 @@ class Scope:
 
     def alias(self) -> str:
         assert self.name
+        if self.is_param:
+            assert self.parent_scope
+            return self.parent_scope._get_param_alias(self.name)
         return f"`{self.name}__{self.id_}`"
+
+    def _get_param_alias(self, name: str) -> str:
+        assert self.name
+        return f"`{name}__param__{self.name}__{self.id_}`"
 
     def _scope_fns_to_cypher(self, first: bool, output: str) -> Tuple[bool, str]:
         def fn_to_cypher(fn: Scope) -> str:
-            color = ""
-            if fn.color:
-                color = f":{fn.color}"
-            return f"({fn.alias()}{color} {{name: '{fn.name}'}})"
+            def cypher_node(alias, name, color) -> str:
+                color_str = f":{color}" if color else ""
+                return f"({alias}{color_str} {{name: '{name}'}})"
+
+            output = cypher_node(fn.alias(), fn.name, fn.color)
+            for param_scope in fn.params.values():
+                output += ", "
+                output += fn_to_cypher(param_scope)
+            return output
 
         for f in self.functions:
             if not first:
@@ -90,7 +117,7 @@ class Scope:
             return self.functions[fnname]
 
         if fnname in self.params:
-            return Scope.create_function(-2, self, fnname, self.params[fnname], {})
+            return self.params[fnname]
 
         if not self.parent_scope:
             return None

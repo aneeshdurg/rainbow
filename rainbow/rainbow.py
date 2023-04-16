@@ -148,7 +148,7 @@ class Rainbow:
         # TODO this should also include finding all the callable params
         # TODO Also need to do a pass verifing that all pass in params have the
         # right colors.
-        params: Dict[str, str] = {}
+        params_to_colors: Dict[str, Optional[str]] = {}
         fn_color: Optional[str] = None
         body: Optional[clang.cindex.Cursor] = None
         if lambda_node := self.is_lambda(node, node.kind):
@@ -178,7 +178,8 @@ class Rainbow:
                 if param_color:
                     # TODO
                     raise Exception(f"COLORED PARAMETER UNSUPPORTED")
-                    params[param_name] = param_color
+                scope_id = self._get_new_scope_id()
+                params_to_colors[param_name] = param_color
             elif self.is_scope(c.kind):
                 if body is not None:
                     raise Exception("?")
@@ -192,17 +193,21 @@ class Rainbow:
             else:
                 fn.color = fn_color
 
-            for param_name in params:
+            for param_name, param_color in params_to_colors.items():
                 if param_name in fn.params:
-                    if fn.params[param_name] != params[param_name]:
+                    if fn.params[param_name].color != param_color:
                         raise Exception(
                             f"Multiple colors found for param {param_name} of function {fnname}"
                         )
                 else:
-                    fn.params[param_name] = params[param_name]
+                    raise Exception(
+                        f"Mismatched parameter names for {fn.name}! {list(fn.params.keys())} vs {list(params_to_colors.keys())}"
+                    )
         else:
             scope_id = self._get_new_scope_id()
-            fn = Scope.create_function(scope_id, scope, fnname, fn_color, params)
+            fn = Scope.create_function(
+                scope_id, scope, fnname, fn_color, params_to_colors
+            )
 
         # This might just be a declaration, so there might not be a function
         # body
