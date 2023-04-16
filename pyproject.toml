@@ -19,8 +19,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: C++",
 ]
 dependencies = [
     "libclang==15.0.6.1",
-    "spycy_aneeshdurg @ https://aneeshdurg.me/spycy/dist/spycy_aneeshdurg-0.0.1-py3-none-any.whl ",
+    "spycy_aneeshdurg==0.0.1",
 ]
