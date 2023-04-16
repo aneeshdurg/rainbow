@@ -23,10 +23,13 @@ class UnitTestScope(unittest.TestCase):
 
     def test_register_call(self):
         root = Scope.create_root()
+        call1 = Scope.create_function(1, root, "call1", None, {})
+        call2 = Scope.create_function(1, root, "call2", None, {})
+        call3 = Scope.create_function(1, root, "call3", None, {})
         root.register_call("call1")
         root.register_call("call2")
         root.register_call("call3")
-        assert root.called_functions == ["call1", "call2", "call3"]
+        assert root.called_functions == [call1, call2, call3]
 
     def test_alias(self):
         with self.assertRaises(AssertionError):
@@ -219,7 +222,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
 
         assert len(scope.functions) == 1
         main_fn = scope.functions["main"]
-        assert main_fn.called_functions == ["main"]
+        assert main_fn.called_functions == [main_fn]
 
     def test_basic_call_Graph(self):
         src = textwrap.dedent(
@@ -249,7 +252,9 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert len(main_fn.params) == 0
         assert len(main_fn.functions) == 0
         assert len(main_fn.child_scopes) == 0
-        assert main_fn.called_functions == ["fn1", "fn2", "fn3"]
+        assert main_fn.called_functions == [
+            scope.functions[f] for f in ["fn1", "fn2", "fn3"]
+        ]
 
     def test_basic_color(self):
         sut = utils.createRainbow(
@@ -274,7 +279,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
 
         assert scope.functions["main"].color == "BLUE"
         assert len(scope.functions["main"].functions) == 0
-        assert scope.functions["main"].called_functions == ["ret0"]
+        assert scope.functions["main"].called_functions == [scope.functions["ret0"]]
         assert len(scope.functions["main"].child_scopes) == 0
 
         assert scope.functions["ret0"].color == "RED"
@@ -299,7 +304,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         main_fn = scope.functions["main"]
         assert main_fn.color == "BLUE"
         assert len(main_fn.functions) == 1
-        assert main_fn.called_functions == ["ret0"]
+        assert main_fn.called_functions == [scope.functions["ret0"]]
         assert len(main_fn.child_scopes) == 0
 
         global_ret0 = scope.functions["ret0"]
@@ -312,6 +317,31 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert resolved_ret0
         assert resolved_ret0 != global_ret0
         assert resolved_ret0 == lambda_ret0
+
+    # Expected failure because conflicting references aren't tracked correctly
+    def test_lambda_name_shadowing_after_reference(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            int main() {
+                int x = ret0();
+                COLOR(BLUE) auto ret0 = []() { return 0; };
+                return x + ret0();
+            }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
+        scope = sut.process()
+
+        assert len(scope.functions) == 2
+
+        main_fn = scope.functions["main"]
+        assert len(main_fn.called_functions) == 2
+        # First call is to the function in global scope
+        assert main_fn.called_functions[0] is scope.functions["ret0"]
+        # Second call is to the shadowing lambda
+        assert main_fn.called_functions[1] is main_fn.functions["ret0"]
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ class Scope:
     parent_scope: Optional["Scope"]
     functions: Dict[str, "Scope"] = field(default_factory=dict)
     child_scopes: List["Scope"] = field(default_factory=list)
-    called_functions: List[str] = field(default_factory=list)
+    called_functions: List["Scope"] = field(default_factory=list)
 
     # Fields that are only relevant if the Scope is a function
     name: Optional[str] = None
@@ -49,7 +49,9 @@ class Scope:
         return Scope(id_, parent, name=name, color=color, is_param=True)
 
     def register_call(self, fnname: str):
-        self.called_functions.append(fnname)
+        resolved = self.resolve_function(fnname)
+        assert resolved
+        self.called_functions.append(resolved)
 
     def dump(self, level: int = 0):
         prefix = " " * (2 * level)
@@ -66,7 +68,7 @@ class Scope:
             fn.dump(level + 2)
         print(prefix, " ", "Called_functions")
         for f in self.called_functions:
-            print(prefix, "   ", f)
+            print(prefix, "   ", f.name)
         print(prefix, " ", "Child Scopes")
         for i, f in enumerate(self.child_scopes):
             print(prefix, "  ", i, ":", end=" ")
@@ -125,11 +127,7 @@ class Scope:
 
     def _calls_to_cypher(self):
         def resolve_called_functions(s: Scope, ret_val: List[Scope]):
-            for f in s.called_functions:
-                defn = s.resolve_function(f)
-                if not defn:
-                    continue
-                ret_val.append(defn)
+            ret_val += s.called_functions
             for cs in s.child_scopes:
                 resolve_called_functions(cs, ret_val)
 
