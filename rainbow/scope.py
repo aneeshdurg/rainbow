@@ -58,7 +58,7 @@ class Scope:
         print("{", self.id_)
         print(prefix, "  Color:", self.color)
         print(prefix, "  Params:")
-        for param, pscope in self.params:
+        for param, pscope in self.params.items():
             print(prefix, f"  {param}:", end=" ")
             pscope.dump(level + 2)
         print(prefix, "  Functions")
@@ -93,7 +93,9 @@ class Scope:
                 return f"({alias}{color_str} {{name: '{name}'}})"
 
             output = cypher_node(fn.alias(), fn.name, fn.color)
-            for param_scope in fn.params.values():
+            for param, param_scope in fn.params.items():
+                if not param:
+                    continue
                 output += ", "
                 output += fn_to_cypher(param_scope)
             return output

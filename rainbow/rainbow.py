@@ -235,20 +235,45 @@ class Rainbow:
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
                 scope.child_scopes.append(new_scope)
-                frontier.extend([(c, new_scope) for c in node.get_children()])
+                frontier = [(c, new_scope) for c in node.get_children()] + frontier
                 continue
 
             if fnname := self.is_function(node, kind):
                 fn_body, fn = self._process_function(fnname, node, scope)
                 if fn_body:
-                    frontier.extend([(c, fn) for c in fn_body.get_children()])
+                    frontier = [(c, fn) for c in fn_body.get_children()] + frontier
                 continue
+
+            if self.is_var_decl(kind):
+                children = list(node.get_children())
+                # TODO handle aliases that break coloring
+                if len(children) == 1:
+                    child = children[0]
+                    if child.kind == CursorKind.UNEXPOSED_EXPR:
+                        children = list(child.get_children())
+                        if len(children) == 1:
+                            child = children[0]
+                            if child.kind == CursorKind.DECL_REF_EXPR:
+                                rhs = child.spelling
+                                if resolved := scope.resolve_function(rhs):
+                                    scope_id = self._get_new_scope_id()
+                                    Scope.create_function(
+                                        scope_id,
+                                        scope,
+                                        node.spelling,
+                                        resolved.color,
+                                        resolved.params_to_colors,
+                                    )
+                                    continue
 
             if called := self.is_call(node):
-                scope.register_call(called)
-                continue
+                try:
+                    scope.register_call(called)
+                except AssertionError:
+                    logging.warn("Could not resolve function call %s" % called)
+                pass
 
-            frontier.extend([(c, scope) for c in node.get_children()])
+            frontier = [(c, scope) for c in node.get_children()] + frontier
 
     def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""

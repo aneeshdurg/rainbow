@@ -304,7 +304,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         main_fn = scope.functions["main"]
         assert main_fn.color == "BLUE"
         assert len(main_fn.functions) == 1
-        assert main_fn.called_functions == [scope.functions["ret0"]]
+        assert main_fn.called_functions == [main_fn.functions["ret0"]]
         assert len(main_fn.child_scopes) == 0
 
         global_ret0 = scope.functions["ret0"]
@@ -318,7 +318,6 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert resolved_ret0 != global_ret0
         assert resolved_ret0 == lambda_ret0
 
-    # Expected failure because conflicting references aren't tracked correctly
     def test_lambda_name_shadowing_after_reference(self):
         src = textwrap.dedent(
             """\
@@ -342,6 +341,56 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         assert main_fn.called_functions[0] is scope.functions["ret0"]
         # Second call is to the shadowing lambda
         assert main_fn.called_functions[1] is main_fn.functions["ret0"]
+
+    def test_call_function_by_a_different_name(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            int main() {
+                auto* ret0_alias = ret0;
+                return ret0_alias();
+            }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
+        scope = sut.process()
+
+        assert len(scope.functions) == 2
+
+        main_fn = scope.functions["main"]
+        assert len(main_fn.called_functions) == 1
+        assert main_fn.called_functions[0] is main_fn.functions["ret0_alias"]
+
+    def test_call_function_by_a_different_name_that_shadows(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            COLOR(BLUE) int ret1() { return 1; }
+            int main() {
+                (void)ret0();
+                (void)ret1();
+                auto* ret0 = ret1;
+                return ret0();
+            }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
+        scope = sut.process()
+
+        assert len(scope.functions) == 3
+
+        main_fn = scope.functions["main"]
+        assert len(main_fn.called_functions) == 3
+        assert main_fn.called_functions[0] is scope.functions["ret0"]
+        assert main_fn.called_functions[1] is scope.functions["ret1"]
+
+        assert main_fn.called_functions[2] is main_fn.functions["ret0"]
+        assert main_fn.called_functions[2] is not scope.functions["ret0"]
+        # main_fn.ret0 should be a function that is not the same as ret1 - it
+        # should be a copy that only preserves the color
+        assert main_fn.called_functions[2] is not scope.functions["ret1"]
 
 
 if __name__ == "__main__":

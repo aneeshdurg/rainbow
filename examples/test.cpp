@@ -12,7 +12,8 @@
   [[COLOR(GREEN)]] int r = 0;
   printf("!!! %d\n", r);
 
-  // This block is invalid
+  // (1) This block is invalid - remove the color annotation on WrapperFn1 to
+  // make it valid
   {
     [[COLOR(YELLOW)]] auto WrapperFn1 = []() { return ret0(); };
     WrapperFn1();
@@ -27,7 +28,7 @@
     [[COLOR(PURPLE)]] auto WrapperFn1 = []() { return ret0(); };
     (void)WrapperFn1();
 
-    // To make this program valid - uncomment the following and remove the
+    // (2) To make this program valid - uncomment the following and remove the
     // original return statement.
     // return ret_wrapper() + WrapperFn1();
     return ret_wrapper() + ret0();
