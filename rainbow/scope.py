@@ -50,6 +50,9 @@ class Scope:
     ) -> "Scope":
         return Scope(id_, parent, name=name, color=color, is_param=True)
 
+    def register_call_scope(self, fn: 'Scope'):
+        self.called_functions.append(fn)
+
     def register_call(self, fnname: str):
         resolved = self.resolve_function(fnname)
         if resolved is None:

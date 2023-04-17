@@ -15,7 +15,7 @@ class UnitTestRainbow(unittest.TestCase):
         assert sut.is_function(node, node.kind) is None
 
         node = MagicMock(kind=clang.cindex.CursorKind.FUNCTION_DECL)
-        assert sut.is_function(node, node.kind) == node.spelling
+        assert sut.is_function(node, node.kind)[0] == node.spelling
 
     def test_no_prefix(self):
         src = textwrap.dedent(

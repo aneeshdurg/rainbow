@@ -27,6 +27,8 @@ class Rainbow:
 
     logger: logging.Logger = field(default_factory=lambda: logging.Logger("rainbow"))
 
+    _hash_to_scope: Dict[int, Scope] = field(default_factory=dict)
+
     def _get_new_scope_id(self) -> int:
         self._scope_id_vendor += 1
         return self._scope_id_vendor
@@ -80,32 +82,34 @@ class Rainbow:
             return None
         return None
 
-    def is_function(self, node: clang.cindex.Cursor, kind: CursorKind) -> Optional[str]:
+    def is_function(self, node: clang.cindex.Cursor, kind: CursorKind) -> Optional[Tuple[str, int]]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
         if kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
-            return node.spelling
+            hash_ = node.hash
+            if defn := node.get_definition():
+                hash_ = defn.hash
+            return node.spelling, hash_
         if self.is_lambda(node, kind):
             if not node.semantic_parent:
                 return None
             parent = node.semantic_parent
             if self.is_var_decl(parent.kind):
-                return parent.spelling
+                return (parent.spelling, parent.hash)
             raise Exception("Unnamed lambda unsupported")
         return None
 
-    def is_call(self, node: clang.cindex.Cursor) -> Optional[str]:
+    def is_call(self, node: clang.cindex.Cursor) -> Optional[Tuple[str, int]]:
         """Determine if `node` is a function call, and if so, return the name of the function called if possible"""
         if node.kind != CursorKind.CALL_EXPR:
             return None
         if (spelling := node.spelling) != "operator()":
-            return spelling
+            return spelling, node.hash
 
         for c in node.get_children():
             if c.kind == CursorKind.UNEXPOSED_EXPR:
                 if c.spelling == "operator()":
                     continue
-                # We mangaled lambda names - need to track lambdas better
-                return c.spelling
+                return c.spelling, c.referenced.hash
         return None
 
     def is_color(self, node: clang.cindex.Cursor) -> Optional[str]:
@@ -321,10 +325,12 @@ class Rainbow:
                 frontier = [(c, new_scope) for c in node.get_children()] + frontier
                 continue
 
-            if fnname := self.is_function(node, kind):
+            if result := self.is_function(node, kind):
+                fnname, hash_ = result
                 fn_body, fn = self._process_function(fnname, node, scope)
                 if fn_body:
                     frontier = [(c, fn) for c in fn_body.get_children()] + frontier
+                self._hash_to_scope[hash_] = fn
                 continue
 
             if self.is_var_decl(kind):
@@ -337,11 +343,18 @@ class Rainbow:
                     continue
 
             if called := self.is_call(node):
+                fnname, hash_ = called
                 try:
-                    scope.register_call(called)
-                except errors.FunctionResolutionError:
-                    self.logger.warning("Could not resolve function call %s" % called)
-                pass
+                    fn = self._hash_to_scope[hash_]
+                except KeyError:
+                    # fall back to name based resolution
+                    try:
+                        fn = scope.resolve_function(fnname)
+                    except errors.FunctionResolutionError:
+                        self.logger.warning("Could not resolve function call %s" % fnname)
+                        continue
+                assert fn
+                scope.register_call_scope(fn)
 
             frontier = [(c, scope) for c in node.get_children()] + frontier
 
