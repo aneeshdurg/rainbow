@@ -19,12 +19,17 @@ def dump_ast(tu: clang.cindex.TranslationUnit):
 @click.command(help="dump C++ ast")
 @click.argument("cpp_file")
 @click.option(
-    "-c", "--clangLocation", type=Path, help="Path to libclang.so", required=True
+    "-c",
+    "--clangLocation",
+    type=Path,
+    help="Path to libclang.so",
+    default=Path("/usr/lib/x86_64-linux-gnu/libclang-15.so.1"),
 )
 def main(cpp_file: str, clanglocation: Optional[Path]):
     clang.cindex.Config.set_library_file(clanglocation)
     index = clang.cindex.Index.create()
-    dump_ast(index.parse(cpp_file))
+    tu = index.parse(cpp_file)
+    dump_ast(tu)
 
 
 if __name__ == "__main__":
