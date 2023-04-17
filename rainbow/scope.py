@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
+from rainbow.errors import FunctionResolutionError
+
 
 @dataclass
 class Scope:
@@ -50,7 +52,8 @@ class Scope:
 
     def register_call(self, fnname: str):
         resolved = self.resolve_function(fnname)
-        assert resolved
+        if resolved is None:
+            raise FunctionResolutionError()
         self.called_functions.append(resolved)
 
     def dump(self, level: int = 0):

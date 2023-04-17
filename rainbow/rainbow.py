@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-import json
 import logging
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 import clang.cindex
 import click
-from clang.cindex import CursorKind
-from spycy import spycy
+from clang.cindex import CursorKind, Diagnostic
 
+import rainbow.errors as errors
 from rainbow.config import Config
 from rainbow.scope import Scope
 
@@ -26,6 +24,8 @@ class Rainbow:
 
     # Set of unsupported types we've already emitted warnings for
     _seen_unsupported_types: Set[CursorKind] = field(default_factory=set)
+
+    logger: logging.Logger = field(default_factory=lambda: logging.Logger("rainbow"))
 
     def _get_new_scope_id(self) -> int:
         self._scope_id_vendor += 1
@@ -60,6 +60,25 @@ class Rainbow:
 
     def is_var_decl(self, kind: CursorKind) -> bool:
         return kind == CursorKind.VAR_DECL
+
+    def is_assignment(
+        self, node: clang.cindex.Cursor, kind: CursorKind
+    ) -> Optional[Tuple[clang.cindex.Cursor, clang.cindex.Cursor]]:
+        if kind == CursorKind.BINARY_OPERATOR:
+            children = list(node.get_children())
+            left_child_tokens = list(children[0].get_tokens())
+            op_offset = len(left_child_tokens)
+
+            # Get the token at op_offset
+            op = None
+            for _, token in zip(range(op_offset + 1), node.get_tokens()):
+                op = token
+            assert op
+
+            if op.spelling == "=":
+                return (children[0], children[1])
+            return None
+        return None
 
     def is_function(self, node: clang.cindex.Cursor, kind: CursorKind) -> Optional[str]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
@@ -142,6 +161,70 @@ class Rainbow:
         )
         return kind in skipped_types
 
+    def _process_alias_function(
+        self, scope: Scope, alias: str, original_name: str
+    ) -> bool:
+        if resolved := scope.resolve_function(original_name):
+            scope_id = self._get_new_scope_id()
+            Scope.create_function(
+                scope_id,
+                scope,
+                alias,
+                resolved.color,
+                resolved.params_to_colors,
+            )
+            return True
+        return False
+
+    def _process_alias_decl(self, node: clang.cindex.Cursor, scope: Scope) -> bool:
+        children = list(node.get_children())
+        if len(children) == 1:
+            child = children[0]
+            if child.kind == CursorKind.UNEXPOSED_EXPR:
+                children = list(child.get_children())
+                if len(children) == 1:
+                    child = children[0]
+                    if child.kind == CursorKind.DECL_REF_EXPR:
+                        return self._process_alias_function(
+                            scope, node.spelling, child.spelling
+                        )
+        return False
+
+    def _process_alias_assign(
+        self, lhs: clang.cindex.Cursor, rhs: clang.cindex.Cursor, scope: Scope
+    ) -> bool:
+        if lhs.kind != CursorKind.DECL_REF_EXPR:
+            return False
+
+        if rhs.kind == CursorKind.UNEXPOSED_EXPR:
+            children = list(rhs.get_children())
+            if len(children) == 1:
+                child = children[0]
+                if child.kind == CursorKind.DECL_REF_EXPR:
+                    # Check that the left hand side is already defined with the
+                    # same color as the right hand side - we know lhs_fn and
+                    # rhs_fn must exist because if they didn't, this source file
+                    # wouldn't have type checked.
+                    lhs_fn = scope.resolve_function(lhs.spelling)
+                    assert lhs_fn
+                    rhs_fn = scope.resolve_function(child.spelling)
+                    assert rhs_fn
+                    if (
+                        lhs_fn.color != rhs_fn.color
+                        or lhs_fn.params_to_colors != rhs_fn.params_to_colors
+                    ):
+                        raise errors.InvalidAssignmentError(
+                            lhs.location,
+                            lhs.spelling,
+                            lhs_fn.color,
+                            rhs_fn.color,
+                        )
+
+                    return self._process_alias_function(
+                        scope, lhs.spelling, child.spelling
+                    )
+        return False
+
     def _process_function(
         self, fnname: str, node: clang.cindex.Cursor, scope: Scope
     ) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
@@ -221,7 +304,7 @@ class Rainbow:
             if self.is_unsupported(kind):
                 if kind not in self._seen_unsupported_types:
                     self._seen_unsupported_types.add(kind)
-                    logging.warn("unsupported node type %s" % kind)
+                    self.logger.warning("unsupported node type %s" % kind)
                 continue
 
             if self.is_skipped(kind):
@@ -245,38 +328,35 @@ class Rainbow:
                 continue
 
             if self.is_var_decl(kind):
-                children = list(node.get_children())
-                # TODO handle aliases that break coloring
-                if len(children) == 1:
-                    child = children[0]
-                    if child.kind == CursorKind.UNEXPOSED_EXPR:
-                        children = list(child.get_children())
-                        if len(children) == 1:
-                            child = children[0]
-                            if child.kind == CursorKind.DECL_REF_EXPR:
-                                rhs = child.spelling
-                                if resolved := scope.resolve_function(rhs):
-                                    scope_id = self._get_new_scope_id()
-                                    Scope.create_function(
-                                        scope_id,
-                                        scope,
-                                        node.spelling,
-                                        resolved.color,
-                                        resolved.params_to_colors,
-                                    )
-                                    continue
+                if self._process_alias_decl(node, scope):
+                    continue
+
+            if operands := self.is_assignment(node, kind):
+                lhs, rhs = operands
+                if self._process_alias_assign(lhs, rhs, scope):
+                    continue
 
             if called := self.is_call(node):
                 try:
                     scope.register_call(called)
-                except AssertionError:
-                    logging.warn("Could not resolve function call %s" % called)
+                except errors.FunctionResolutionError:
+                    self.logger.warning("Could not resolve function call %s" % called)
                 pass
 
             frontier = [(c, scope) for c in node.get_children()] + frontier
 
     def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""
+        error_count = 0
+        for diag in self.tu.diagnostics:
+            if diag.severity == Diagnostic.Warning:
+                self.logger.warning("Found warning diagnostic: %s" % diag.spelling)
+            elif diag.severity == Diagnostic.Error:
+                error_count += 1
+                self.logger.warning("Found error diagnostic: %s" % diag.spelling)
+        if error_count > 0:
+            raise errors.CPPSyntaxErrors()
+
         self._process(self.tu.cursor, self._global_scope)
         return self._global_scope
 
@@ -305,7 +385,11 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     tu = index.parse(cpp_file)
     # TODO set compilation db if it exists
     rainbow = Rainbow(tu, config)
-    found_invalid = rainbow.run()
+    try:
+        found_invalid = rainbow.run()
+    except Exception as e:
+        rainbow.logger.error(str(e))
+        sys.exit(1)
 
     if found_invalid is None:
         invalidcalls = "UNKNOWN"

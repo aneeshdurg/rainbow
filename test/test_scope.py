@@ -4,6 +4,7 @@ import unittest
 import utils
 from spycy import spycy
 
+from rainbow.errors import InvalidAssignmentError
 from rainbow.scope import Scope
 
 
@@ -194,7 +195,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         src = textwrap.dedent(
             """\
             int main() {
-                return 0
+                return 0;
             }
         """
         )
@@ -391,6 +392,29 @@ class TestRainbowScopeConstruction(unittest.TestCase):
         # main_fn.ret0 should be a function that is not the same as ret1 - it
         # should be a copy that only preserves the color
         assert main_fn.called_functions[2] is not scope.functions["ret1"]
+
+    def test_invalid_assignment(self):
+        src = textwrap.dedent(
+            """\
+            #define COLOR(X) [[clang::annotate(#X)]]
+            COLOR(RED) int ret0() { return 0; }
+            COLOR(BLUE) int ret1() { return 1; }
+            int main() {
+                // This should color `fn_alias` as RED
+                auto* fn_alias = ret0;
+                (void)fn_alias();
+
+                // Invalid assignment of a BLUE function to a RED name
+                fn_alias = ret1;
+                (void)fn_alias();
+
+                return 0;
+            }
+        """
+        )
+        with self.assertRaises(InvalidAssignmentError):
+            sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
+            sut.process()
 
 
 if __name__ == "__main__":

@@ -43,6 +43,8 @@ class End2EndTests(unittest.TestCase):
     def test_reject_parameter_mismatch(self):
         src = textwrap.dedent(
             """\
+                #include <functional>
+
                 #define COLOR(X) [[clang::annotate(#X)]]
                 int ret0(COLOR(RED) std::function<int(void)> cb) { return cb(); }
                 int main() {

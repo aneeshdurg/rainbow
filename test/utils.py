@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import unittest
@@ -21,7 +22,9 @@ def createRainbow(
         config = Config.from_dict(
             Path("."), {"prefix": prefix, "colors": colors, "patterns": patterns}
         )
-        return rainbow.Rainbow(tu, config)
+        rainbow_obj = rainbow.Rainbow(tu, config)
+        rainbow_obj.logger.setLevel(logging.CRITICAL)
+        return rainbow_obj
 
 
 def main():
