@@ -5,6 +5,7 @@
   ],
   "patterns": [
     "p = (:RED)-[:CALLS*]->(:BLUE) WHERE NOT any(n in nodes(p) WHERE n:PURPLE)",
-    "(:GREEN)-[:CALLS*]->(:RED)"
+    "(:GREEN)-[:CALLS*]->(:RED)",
+    "(:YELLOW)-->(x) WHERE NOT x:YELLOW"
   ]
 }

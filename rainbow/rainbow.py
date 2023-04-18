@@ -82,7 +82,9 @@ class Rainbow:
             return None
         return None
 
-    def is_function(self, node: clang.cindex.Cursor, kind: CursorKind) -> Optional[Tuple[str, int]]:
+    def is_function(
+        self, node: clang.cindex.Cursor, kind: CursorKind
+    ) -> Optional[Tuple[str, int]]:
         """Determine if `node` is a function definition, and if so, return the name of the function called if possible"""
         if kind in [CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE]:
             hash_ = node.hash
@@ -118,7 +120,7 @@ class Rainbow:
             if node.spelling.startswith(self.config.prefix):
                 color = node.spelling[len(self.config.prefix) :]
                 if color not in self.config.colors:
-                    raise Exception(f"Found unknown color {color}")
+                    raise errors.UnknownColorError(node.location, color)
                 return color
         return None
 
@@ -230,11 +232,10 @@ class Rainbow:
         return False
 
     def _process_function(
-        self, fnname: str, node: clang.cindex.Cursor, scope: Scope
+        self, fnname: str, hash_: int, node: clang.cindex.Cursor, scope: Scope
     ) -> Tuple[Optional[clang.cindex.Cursor], Scope]:
-        # TODO this should also include finding all the callable params
-        # TODO Also need to do a pass verifing that all pass in params have the
-        # right colors.
+        # TODO Also need to do a pass verifing that all passed in params have
+        # the right colors.
         params_to_colors: Dict[str, Optional[str]] = {}
         fn_color: Optional[str] = None
         body: Optional[clang.cindex.Cursor] = None
@@ -254,6 +255,8 @@ class Rainbow:
                 fn_color = color
             elif c.kind == CursorKind.PARM_DECL:
                 param_name = c.spelling
+                if not param_name:
+                    param_name = f"!unnamed_param{len(params_to_colors)}"
                 param_color = None
                 for param_child in c.get_children():
                     if color := self.is_color(param_child):
@@ -272,8 +275,7 @@ class Rainbow:
                     raise Exception("?")
                 body = c
 
-        if fnname in scope.functions:
-            fn = scope.functions[fnname]
+        if fn := self._hash_to_scope.get(hash_):
             if fn_color and fn.color:
                 if fn.color != fn_color:
                     raise Exception(f"Multiple colors found for function {fnname}")
@@ -295,6 +297,7 @@ class Rainbow:
             fn = Scope.create_function(
                 scope_id, scope, fnname, fn_color, params_to_colors
             )
+            self._hash_to_scope[hash_] = fn
 
         # This might just be a declaration, so there might not be a function
         # body
@@ -316,8 +319,6 @@ class Rainbow:
 
             # TODO(aneesh) Support namespaces and namespaced functions
 
-            # TODO - Are scopes not enough to resolve fn calls, do we also need line
-            # numbers to handle shadowing?
             if self.is_scope(kind):
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
@@ -327,10 +328,9 @@ class Rainbow:
 
             if result := self.is_function(node, kind):
                 fnname, hash_ = result
-                fn_body, fn = self._process_function(fnname, node, scope)
+                fn_body, fn = self._process_function(fnname, hash_, node, scope)
                 if fn_body:
                     frontier = [(c, fn) for c in fn_body.get_children()] + frontier
-                self._hash_to_scope[hash_] = fn
                 continue
 
             if self.is_var_decl(kind):
@@ -351,11 +351,11 @@ class Rainbow:
                     try:
                         fn = scope.resolve_function(fnname)
                     except errors.FunctionResolutionError:
-                        self.logger.warning("Could not resolve function call %s" % fnname)
-                        continue
-                assert fn
-                scope.register_call_scope(fn)
-
+                        fn = None
+                if fn:
+                    scope.register_call_scope(fn)
+                else:
+                    self.logger.warning("Could not resolve function call %s" % fnname)
             frontier = [(c, scope) for c in node.get_children()] + frontier
 
     def process(self) -> Scope:

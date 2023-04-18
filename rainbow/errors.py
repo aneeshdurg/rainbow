@@ -8,6 +8,12 @@ class CPPSyntaxErrors(Exception):
         super().__init__("Detected syntax errors in source")
 
 
+class UnknownColorError(Exception):
+    def __init__(self, loc: clang.cindex.SourceLocation, color: str):
+        msg = f"Found unknown color {color} in {loc.file} @ {loc.line}:{loc.column}"
+        super().__init__(msg)
+
+
 class InvalidAssignmentError(Exception):
     def __init__(
         self,
