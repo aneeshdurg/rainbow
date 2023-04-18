@@ -6,7 +6,7 @@
 [[COLOR(PURPLE)]] int printf(char *fmt, ...);
 
 [[COLOR(BLUE)]] int ret0() { return 0; };
-// This is an uncolored function called a BLUE function - RED functions cannot
+// This is an uncolored function calling a BLUE function - RED functions cannot
 // call this.
 int ret0_indirect() { return ret0(); };
 [[COLOR(PURPLE)]] int ret_wrapper() { return ret0(); };

@@ -83,7 +83,7 @@ Now we can run `rainbow` to generate a cypher program that determines the
 validity of this example. To run `rainbow`, use the command:
 
 ```bash
-python3 -m rainbow <path_to_source>.cpp <path_to_config>.json
+python3 -m rainbow <path_to_source>.cpp <path_to_config>.json -vvv
 ```
 
 And it should output:
@@ -92,9 +92,12 @@ And it should output:
 program is invalid: True
 ```
 
-If you open `examples/test.cpp` and `examples/config.json`, you will see a more
-involved example for an invalid program, with comments detailing how to make the
-program valid.
+See the `examples/` directory for more examples of how to get
+detailed error reporting from `rainbow`. For example, if you open
+`examples/full/test.cpp` and `examples/full/config.json`, you will see a more
+involved example for an invalid program (with comments detailing how to make the
+program valid), and a more detailed configuration that includes custom error
+reporting it make it easier to find errors in the source.
 
 ### Executors
 
@@ -105,7 +108,7 @@ However, the `examples` directory contains alternate executors such as a
 queries to stdout. Try using the `echo` executor with:
 
 ```bash
-python3 -m rainbow examples/test.cpp examples/config_echo.json
+python3 -m rainbow examples/full/test.cpp examples/full/config_echo.json
 ```
 
 and you should see:
@@ -121,7 +124,6 @@ CREATE (`printf__1`:PURPLE {name: 'printf'}),
   (`main__4`) -[:CALLS]-> (`ret0__2`),
   (`WrapperFn1__38`) -[:CALLS]-> (`ret0__2`),
   (`WrapperFn1__39`) -[:CALLS]-> (`ret0__2`)
-;
 MATCH p = (:RED)-[:CALLS*]->(:BLUE) WHERE NOT any(n in nodes(p) WHERE n:PURPLE) RETURN count(*) > 0 as invalidcalls;
 MATCH (:GREEN)-[:CALLS*]->(:RED) RETURN count(*) > 0 as invalidcalls;
 MATCH (:YELLOW)-->(x) WHERE NOT x:YELLOW RETURN count(*) > 0 as invalidcalls
