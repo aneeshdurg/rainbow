@@ -6,10 +6,15 @@
 [[COLOR(PURPLE)]] int printf(char *fmt, ...);
 
 [[COLOR(BLUE)]] int ret0() { return 0; };
-[[COLOR(YELLOW)]] int ret1() { return 0; };
+// This is an uncolored function called a BLUE function - RED functions cannot
+// call this.
+int ret0_indirect() { return ret0(); };
 [[COLOR(PURPLE)]] int ret_wrapper() { return ret0(); };
 
+[[COLOR(YELLOW)]] int ret1() { return 1; };
+
 [[COLOR(RED)]] int main() {
+  // This annotation should be ignored - it's not on a function
   [[COLOR(GREEN)]] int r = 0;
   printf("!!! %d\n", r);
 
@@ -31,7 +36,7 @@
     // (2) To make this program valid - uncomment the following and remove the
     // original return statement.
     // return ret_wrapper() + WrapperFn1();
-    return ret_wrapper() + ret0();
+    return ret_wrapper() + ret0_indirect();
   }
   return 0;
 }

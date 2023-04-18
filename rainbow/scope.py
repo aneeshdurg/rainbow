@@ -171,5 +171,5 @@ class Scope:
         _, output = self._scope_fns_to_cypher(True, "")
         output += self._calls_to_cypher()
         if output == "":
-            return "RETURN 0\n;"
-        return "CREATE " + output + "\n;"
+            return "RETURN 0"
+        return "CREATE " + output

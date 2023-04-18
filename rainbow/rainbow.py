@@ -387,17 +387,45 @@ class Rainbow:
 @click.argument("cpp_file")
 @click.argument("config_file")
 @click.option("-c", "--clangLocation", type=Path, help="Path to libclang.so")
-def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (can be supplied multiple times)",
+)
+@click.option("-q", "--quiet", is_flag=True, help="Suppress output")
+def main(
+    cpp_file: str,
+    config_file: str,
+    clanglocation: Optional[Path],
+    verbose: int,
+    quiet: bool,
+):
     if not clanglocation:
         clanglocation = Path("/usr/lib/x86_64-linux-gnu/libclang-15.so.1")
     clang.cindex.Config.set_library_file(clanglocation)
 
-    config = Config.from_json(Path(config_file))
+    if quiet and verbose > 0:
+        print("--quiet and --verbose cannot be supplied together", file=sys.stderr)
+        sys.exit(1)
+
+    logging.basicConfig(level=logging.NOTSET)
+    logger = logging.getLogger("rainbow")
+    verbosity_map = {
+        -1: logging.CRITICAL,
+        0: logging.ERROR,
+        1: logging.WARNING,
+        2: logging.INFO,
+        3: logging.DEBUG,
+    }
+    logger.setLevel(verbosity_map[min(verbose if not quiet else -1, 3)])
+
+    config = Config.from_json(Path(config_file), logger=logger)
 
     index = clang.cindex.Index.create()
     tu = index.parse(cpp_file)
     # TODO set compilation db if it exists
-    rainbow = Rainbow(tu, config)
+    rainbow = Rainbow(tu, config, logger=logger)
     try:
         found_invalid = rainbow.run()
     except Exception as e:
@@ -410,5 +438,5 @@ def main(cpp_file: str, config_file: str, clanglocation: Optional[Path]):
     else:
         invalidcalls = found_invalid
         exitcode = int(found_invalid)
-    print("program is invalid:", invalidcalls, file=sys.stderr)
+    logger.info(f"program is invalid: {invalidcalls}")
     sys.exit(exitcode)

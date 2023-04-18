@@ -20,5 +20,11 @@
       },
       "msg": "Found yellow function (%a) calling non-yellow function (%x)"
     }
-  ]
+  ],
+  "executor": "examples/executors/neo4j_adapter.py",
+  "neo4j_config": {
+    "uri": "bolt://localhost:7687",
+    "username": "neo4j",
+    "password": "admin"
+  }
 }
