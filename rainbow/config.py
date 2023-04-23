@@ -46,11 +46,10 @@ class Pattern:
     def _assemble_query(self) -> str:
         projections = "count(*) > 0 as invalidcalls"
         if self.on_match:
-            assert self.on_match
             projection_frags = []
             for k, v in self.on_match.items():
                 projection_frags.append(f"{v} as {k}")
-            projections = ", ".join(projection_frags)
+            projections = "DISTINCT " + ", ".join(projection_frags)
         elif self.error_msg:
             projections = "*"
         return f"MATCH {self.match_pattern} RETURN {projections}"

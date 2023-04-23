@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from rainbow.errors import FunctionResolutionError
 
@@ -145,8 +145,9 @@ class Scope:
             for c in called:
                 output += ",\n  "
                 output += f"({fn.alias()}) -[:CALLS]-> ({c.alias()})"
-            for child_fn in fn.functions:
-                fn_scope = fn.functions[child_fn]
+            for fn_scope in fn.params.values():
+                output = scope_calls_to_cypher(fn_scope, output)
+            for fn_scope in fn.functions.values():
                 output = scope_calls_to_cypher(fn_scope, output)
             return output
 

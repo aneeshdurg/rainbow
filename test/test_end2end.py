@@ -3,6 +3,8 @@ import unittest
 
 import utils
 
+from rainbow import errors
+
 
 class End2EndTests(unittest.TestCase):
     def test_no_annotations(self):
@@ -38,8 +40,6 @@ class End2EndTests(unittest.TestCase):
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-->(:BLUE)"])
         assert sut.run()
 
-    # Expected fail because parameters verification not implemented
-    @unittest.expectedFailure
     def test_reject_parameter_mismatch(self):
         src = textwrap.dedent(
             """\
@@ -54,7 +54,8 @@ class End2EndTests(unittest.TestCase):
         """
         )
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], [])
-        assert sut.run()
+        with self.assertRaises(errors.InvalidAssignmentError):
+            sut.run()
 
 
 if __name__ == "__main__":

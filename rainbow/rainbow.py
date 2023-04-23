@@ -3,7 +3,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import clang.cindex
 import click
@@ -28,6 +28,8 @@ class Rainbow:
     logger: logging.Logger = field(default_factory=lambda: logging.Logger("rainbow"))
 
     _hash_to_scope: Dict[int, Scope] = field(default_factory=dict)
+
+    _frontier: List[Tuple[clang.cindex.Cursor, Scope]] = field(default_factory=list)
 
     def _get_new_scope_id(self) -> int:
         self._scope_id_vendor += 1
@@ -168,32 +170,58 @@ class Rainbow:
         return kind in skipped_types
 
     def _process_alias_function(
-        self, scope: Scope, alias: str, original_name: str
+        self,
+        scope: Scope,
+        alias: str,
+        original_fn_node: clang.cindex.Cursor,
+        original_name: str,
     ) -> bool:
-        if resolved := scope.resolve_function(original_name):
-            scope_id = self._get_new_scope_id()
-            Scope.create_function(
-                scope_id,
-                scope,
-                alias,
-                resolved.color,
-                resolved.params_to_colors,
-            )
-            return True
-        return False
+        resolved = self._hash_to_scope.get(original_fn_node.hash)
+        if not resolved:
+            resolved = scope.resolve_function(original_name)
+
+        if resolved is None:
+            return False
+        scope_id = self._get_new_scope_id()
+        Scope.create_function(
+            scope_id,
+            scope,
+            alias,
+            resolved.color,
+            resolved.params_to_colors,
+        )
+        return True
 
     def _process_alias_decl(self, node: clang.cindex.Cursor, scope: Scope) -> bool:
         children = list(node.get_children())
         if len(children) == 1:
             child = children[0]
-            if child.kind == CursorKind.UNEXPOSED_EXPR:
+            kind = child.kind
+            if kind == CursorKind.UNEXPOSED_EXPR:
                 children = list(child.get_children())
                 if len(children) == 1:
                     child = children[0]
                     if child.kind == CursorKind.DECL_REF_EXPR:
                         return self._process_alias_function(
-                            scope, node.spelling, child.spelling
+                            scope, node.spelling, child.referenced, child.spelling
                         )
+            elif kind == CursorKind.CALL_EXPR:
+                if child.spelling == "":
+                    children = list(child.get_children())
+                    if len(children) == 1:
+                        child = children[0]
+                        if child.kind == CursorKind.UNEXPOSED_EXPR:
+                            children = list(child.get_children())
+                            if len(children) == 1:
+                                child = children[0]
+                                if child.kind == CursorKind.DECL_REF_EXPR:
+                                    return self._process_alias_function(
+                                        scope,
+                                        node.spelling,
+                                        child.referenced,
+                                        child.spelling,
+                                    )
+
         return False
 
     def _process_alias_assign(
@@ -227,7 +255,7 @@ class Rainbow:
                         )
 
                     return self._process_alias_function(
-                        scope, lhs.spelling, child.spelling
+                        scope, lhs.spelling, child.referenced, child.spelling
                     )
         return False
 
@@ -241,11 +269,14 @@ class Rainbow:
         body: Optional[clang.cindex.Cursor] = None
         if lambda_node := self.is_lambda(node, node.kind):
             parent = node.semantic_parent
-            for c in parent.get_children():
-                if color := self.is_color(c):
-                    if fn_color is not None:
-                        raise Exception(f"Multiple colors found for function {fnname}")
-                    fn_color = color
+            if parent:
+                for c in parent.get_children():
+                    if color := self.is_color(c):
+                        if fn_color is not None:
+                            raise Exception(
+                                f"Multiple colors found for function {fnname}"
+                            )
+                        fn_color = color
             node = lambda_node
 
         for c in node.get_children():
@@ -265,9 +296,6 @@ class Rainbow:
                                 f"Multiple colors found for param {param_name} of function {fnname}"
                             )
                         param_color = color
-                if param_color:
-                    # TODO
-                    raise Exception(f"COLORED PARAMETER UNSUPPORTED")
                 scope_id = self._get_new_scope_id()
                 params_to_colors[param_name] = param_color
             elif self.is_scope(c.kind):
@@ -303,10 +331,85 @@ class Rainbow:
         # body
         return (body, fn)
 
+    def _is_fn_param(self, scope: Scope, param: clang.cindex.Cursor) -> Optional[Scope]:
+        if not param.kind == CursorKind.UNEXPOSED_EXPR:
+            return None
+        children = list(param.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if not child.kind == CursorKind.CALL_EXPR:
+            return None
+        if child.spelling != "":
+            return None
+        children = list(child.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if not child.kind == CursorKind.UNEXPOSED_EXPR:
+            return None
+        children = list(child.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if not child.kind == CursorKind.UNEXPOSED_EXPR:
+            return None
+        children = list(child.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if not child.kind == CursorKind.UNEXPOSED_EXPR:
+            return None
+        children = list(child.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if not child.kind == CursorKind.CALL_EXPR:
+            return None
+        if child.spelling != "function":
+            return None
+        children = list(child.get_children())
+        if len(children) != 1:
+            return None
+        child = children[0]
+
+        if child.kind == CursorKind.DECL_REF_EXPR:
+            if child.referenced.hash not in self._hash_to_scope:
+                try:
+                    return scope.resolve_function(child.spelling)
+                except errors.FunctionResolutionError:
+                    logging.warn(
+                        f"Found functional parameter {child.spelling}, but could not lookup defn"
+                    )
+                    return None
+            return self._hash_to_scope[child.referenced.hash]
+        elif child.kind == CursorKind.UNEXPOSED_EXPR:
+            children = list(child.get_children())
+            if len(children) == 1:
+                child = children[0]
+                if child.kind == CursorKind.LAMBDA_EXPR:
+                    fn_body, fn = self._process_function(
+                        f"!unnamed_lambda{len(scope.functions)}",
+                        child.hash,
+                        child,
+                        scope,
+                    )
+                    assert fn_body is not None
+                    self._frontier = [
+                        (c, fn) for c in fn_body.get_children()
+                    ] + self._frontier
+                    return fn
+            return None
+
     def _process(self, root: clang.cindex.Cursor, r_scope: Scope):
-        frontier = [(root, r_scope)]
-        while len(frontier) > 0:
-            node, scope = frontier.pop(0)
+        self._frontier = [(root, r_scope)]
+        while len(self._frontier) > 0:
+            node, scope = self._frontier.pop(0)
             kind = node.kind
             if self.is_unsupported(kind):
                 if kind not in self._seen_unsupported_types:
@@ -323,14 +426,18 @@ class Rainbow:
                 scope_id = self._get_new_scope_id()
                 new_scope = Scope(scope_id, scope)
                 scope.child_scopes.append(new_scope)
-                frontier = [(c, new_scope) for c in node.get_children()] + frontier
+                self._frontier = [
+                    (c, new_scope) for c in node.get_children()
+                ] + self._frontier
                 continue
 
             if result := self.is_function(node, kind):
                 fnname, hash_ = result
                 fn_body, fn = self._process_function(fnname, hash_, node, scope)
                 if fn_body:
-                    frontier = [(c, fn) for c in fn_body.get_children()] + frontier
+                    self._frontier = [
+                        (c, fn) for c in fn_body.get_children()
+                    ] + self._frontier
                 continue
 
             if self.is_var_decl(kind):
@@ -354,9 +461,43 @@ class Rainbow:
                         fn = None
                 if fn:
                     scope.register_call_scope(fn)
+                    params = list(node.get_children())[1:]
+                    if (
+                        len(params)
+                        and params[0].kind == CursorKind.UNEXPOSED_EXPR
+                        and params[0].spelling == "operator()"
+                    ):
+                        params = params[1:]
+                    if len(params) != len(fn.params):
+                        logging.warn(
+                            f"Could not verify parameters passed into {fn.name} @ {node.location}"
+                        )
+                    else:
+                        for i, c, param_scope in zip(
+                            range(len(params)), params, fn.params.values()
+                        ):
+                            if param := self._is_fn_param(scope, c):
+                                if param_scope.color:
+                                    if (
+                                        param.color is not None
+                                        and param.color != param_scope.color
+                                    ):
+                                        raise errors.InvalidAssignmentError(
+                                            node.location,
+                                            f"(Parameter {i} of {fnname})",
+                                            param_scope.color,
+                                            param.color,
+                                        )
+                                param_scope.register_call_scope(param)
+                            else:
+                                assert (
+                                    param_scope.color is None
+                                ), f"{param_scope.name}, {param_scope.color}"
+                                continue
+
                 else:
                     self.logger.warning("Could not resolve function call %s" % fnname)
-            frontier = [(c, scope) for c in node.get_children()] + frontier
+            self._frontier = [(c, scope) for c in node.get_children()] + self._frontier
 
     def process(self) -> Scope:
         """Process the input file and extract the call graph, and colors for every function"""
@@ -430,6 +571,7 @@ def main(
         found_invalid = rainbow.run()
     except Exception as e:
         rainbow.logger.error(str(e))
+        raise e
         sys.exit(1)
 
     if found_invalid is None:
