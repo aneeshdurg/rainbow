@@ -1,0 +1,15 @@
+{
+  "prefix": "LOCKING::",
+  "colors": [
+    "REQUIRED", "RELEASES", "TAKES", "SPAWNER"
+  ],
+  "patterns": [
+    {
+      "pattern": "(x)-[:CALLS]->({name: 'pthread_create'}) WHERE NOT x:SPAWNER",
+      "on_match": {
+        "fn": "x.name"
+      },
+      "msg": "%fn needs LOCKING::SPAWNER annotation"
+    }
+  ]
+}
