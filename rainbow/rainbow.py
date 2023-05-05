@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import sys
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -77,7 +78,8 @@ class Rainbow:
             op = None
             for _, token in zip(range(op_offset + 1), node.get_tokens()):
                 op = token
-            assert op
+            if not op:
+                return None
 
             if op.spelling == "=":
                 return (children[0], children[1])
@@ -160,7 +162,6 @@ class Rainbow:
                 CursorKind.TYPE_ALIAS_DECL,
                 CursorKind.TYPE_ALIAS_TEMPLATE_DECL,
                 CursorKind.UNEXPOSED_ATTR,
-                CursorKind.UNEXPOSED_DECL,
                 CursorKind.UNION_DECL,
                 CursorKind.USING_DIRECTIVE,
                 CursorKind.VISIBILITY_ATTR,
@@ -560,6 +561,9 @@ def main(
         3: logging.DEBUG,
     }
     logger.setLevel(verbosity_map[min(verbose if not quiet else -1, 3)])
+
+    if verbose < 3:
+        warnings.filterwarnings("ignore")
 
     config = Config.from_json(Path(config_file), logger=logger)
 
