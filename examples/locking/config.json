@@ -10,6 +10,29 @@
         "fn": "x.name"
       },
       "msg": "%fn needs LOCKING::SPAWNER annotation"
+    },
+    {
+      "pattern": "(x)-[:CALLS]->(y:TAKES) WHERE NOT (x)-->(:RELEASES) AND NOT x:TAKES",
+      "on_match": {
+        "caller": "x.name",
+        "callee": "y.name"
+      },
+      "msg": "%caller needs LOCKING::TAKES annotation in %caller -> %callee"
+    },
+    {
+      "pattern": "(x)-[:CALLS]->(y:REQUIRED) WHERE NOT (x:TAKES OR x:REQUIRED)",
+      "on_match": {
+        "caller": "x.name",
+        "callee": "y.name"
+      },
+      "msg": "%caller needs LOCKING::TAKES or LOCKING::REQUIRED annotation in %caller -> %callee"
+    },
+    {
+      "pattern": "p = (:REQUIRED)-[:CALLS*]->(:TAKES)",
+      "on_match": {
+        "chain": "[n in nodes(p) | n.name + ([l in labels(n) | ':' + l] + [''])[0]]"
+      },
+      "msg": "Found invalid re-acquire of lock: %chain"
     }
   ]
 }

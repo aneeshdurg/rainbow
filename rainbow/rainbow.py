@@ -470,7 +470,7 @@ class Rainbow:
                     ):
                         params = params[1:]
                     if len(params) != len(fn.params):
-                        logging.warn(
+                        self.logger.warn(
                             f"Could not verify parameters passed into {fn.name} @ {node.location}"
                         )
                     else:
@@ -497,6 +497,8 @@ class Rainbow:
                                 continue
 
                 else:
+                    if fnname == "":
+                        fnname = "`???`"
                     self.logger.warning("Could not resolve function call %s" % fnname)
             self._frontier = [(c, scope) for c in node.get_children()] + self._frontier
 

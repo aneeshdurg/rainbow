@@ -1,3 +1,4 @@
+#include <functional>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,21 +10,27 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int counter = 0;
 
-[[LOCK(REQUIRED)]] void increment_counter() {
-  counter++; }
+[[LOCK(REQUIRED)]] void increment_counter() { counter++; }
 [[LOCK(TAKES)]] void get_lock() { pthread_mutex_lock(&mutex); }
 [[LOCK(RELEASES)]] void release_lock() { pthread_mutex_unlock(&mutex); }
 
-void with_lock([[LOCK(REQUIRED)]]) {
-  get_lock();
-  increment_counter();
-  usleep(rand() % 500);
+void with_lock([[LOCK(REQUIRED)]] std::function<void(void)> critical_fn) {
+  [[LOCK(TAKES)]] auto do_with_lock = [&]() {
+    get_lock();
+    critical_fn();
+  };
+  do_with_lock();
+  release_lock();
 }
 
 void *worker(void *_arg) {
   for (size_t i = 0; i < 1000; i++) {
     if (rand() % 2 == 0) {
-      do_work();
+      [[LOCK(REQUIRED)]] auto critical_section = [&]() {
+        increment_counter();
+        usleep(rand() % 500);
+      };
+      with_lock(critical_section);
     }
     usleep(500);
   }

@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: C++",
 ]
 dependencies = [
+    "click==8.1.3",
     "libclang==15.0.6.1",
     "spycy_aneeshdurg==0.0.1",
 ]
