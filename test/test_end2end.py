@@ -90,6 +90,24 @@ class End2EndTests(unittest.TestCase):
         sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-[*]->(:BLUE)"])
         assert sut.run()
 
+    def test_invalid_alias(self):
+        src = textwrap.dedent(
+            """\
+                #include <functional>
+
+                #define COLOR(X) [[clang::annotate(#X)]]
+                int ret0(COLOR(RED) std::function<int(void)> cb) { return cb(); }
+                int main() {
+                    COLOR(BLUE) auto cb = []() { return 0; };
+                    COLOR(RED) auto cb_alias = cb;
+                    return ret0(cb_alias);
+                }
+        """
+        )
+        sut = utils.createRainbow(src, "", ["RED", "BLUE"], ["(:RED)-[*]->(:BLUE)"])
+        with self.assertRaises(errors.InvalidAssignmentError):
+            sut.run()
+
     @unittest.expectedFailure
     def test_reject_indirect_aliased_parameter(self):
         src = textwrap.dedent(

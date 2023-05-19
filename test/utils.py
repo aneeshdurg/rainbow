@@ -22,10 +22,14 @@ def createRainbow(
         config = Config.from_dict(
             Path("."), {"prefix": prefix, "colors": colors, "patterns": patterns}
         )
-        config.logger.setLevel(logging.CRITICAL)
+
+        log_lvl = logging.CRITICAL
+        if os.environ.get("RAINBOW_DEBUG", False):
+            log_lvl = logging.DEBUG
+        config.logger.setLevel(log_lvl)
 
         rainbow_obj = rainbow.Rainbow(tu, config)
-        rainbow_obj.logger.setLevel(logging.CRITICAL)
+        rainbow_obj.logger.setLevel(log_lvl)
         return rainbow_obj
 
 

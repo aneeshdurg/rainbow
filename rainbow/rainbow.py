@@ -173,7 +173,9 @@ class Rainbow:
     def _process_alias_function(
         self,
         scope: Scope,
+        loc: clang.cindex.SourceLocation,
         alias: str,
+        color: Optional[str],
         original_fn_node: clang.cindex.Cursor,
         original_name: str,
     ) -> bool:
@@ -183,6 +185,10 @@ class Rainbow:
 
         if resolved is None:
             return False
+
+        if resolved.color != color:
+            raise errors.InvalidAssignmentError(loc, alias, color, resolved.color)
+
         scope_id = self._get_new_scope_id()
         Scope.create_function(
             scope_id,
@@ -195,33 +201,46 @@ class Rainbow:
 
     def _process_alias_decl(self, node: clang.cindex.Cursor, scope: Scope) -> bool:
         children = list(node.get_children())
-        if len(children) == 1:
-            child = children[0]
-            kind = child.kind
-            if kind == CursorKind.UNEXPOSED_EXPR:
+
+        color = None
+        for c in children[:-1]:
+            if child_color := self.is_color(c):
+                assert color is None
+                color = child_color
+
+        child = children[-1]
+        kind = child.kind
+        if kind == CursorKind.UNEXPOSED_EXPR:
+            children = list(child.get_children())
+            if len(children) == 1:
+                child = children[0]
+                if child.kind == CursorKind.DECL_REF_EXPR:
+                    return self._process_alias_function(
+                        scope,
+                        node.location,
+                        node.spelling,
+                        color,
+                        child.referenced,
+                        child.spelling,
+                    )
+        elif kind == CursorKind.CALL_EXPR:
+            if child.spelling == "":
                 children = list(child.get_children())
                 if len(children) == 1:
                     child = children[0]
-                    if child.kind == CursorKind.DECL_REF_EXPR:
-                        return self._process_alias_function(
-                            scope, node.spelling, child.referenced, child.spelling
-                        )
-            elif kind == CursorKind.CALL_EXPR:
-                if child.spelling == "":
-                    children = list(child.get_children())
-                    if len(children) == 1:
-                        child = children[0]
-                        if child.kind == CursorKind.UNEXPOSED_EXPR:
-                            children = list(child.get_children())
-                            if len(children) == 1:
-                                child = children[0]
-                                if child.kind == CursorKind.DECL_REF_EXPR:
-                                    return self._process_alias_function(
-                                        scope,
-                                        node.spelling,
-                                        child.referenced,
-                                        child.spelling,
-                                    )
+                    if child.kind == CursorKind.UNEXPOSED_EXPR:
+                        children = list(child.get_children())
+                        if len(children) == 1:
+                            child = children[0]
+                            if child.kind == CursorKind.DECL_REF_EXPR:
+                                return self._process_alias_function(
+                                    scope,
+                                    node.location,
+                                    node.spelling,
+                                    color,
+                                    child.referenced,
+                                    child.spelling,
+                                )
 
         return False
 
@@ -256,7 +275,12 @@ class Rainbow:
                         )
 
                     return self._process_alias_function(
-                        scope, lhs.spelling, child.referenced, child.spelling
+                        scope,
+                        lhs.location,
+                        lhs.spelling,
+                        lhs_fn.color,
+                        child.referenced,
+                        child.spelling,
                     )
         return False
 
@@ -382,14 +406,19 @@ class Rainbow:
         if child.kind == CursorKind.DECL_REF_EXPR:
             if child.referenced.hash not in self._hash_to_scope:
                 try:
-                    return scope.resolve_function(child.spelling)
+                    if fn := scope.resolve_function(child.spelling):
+                        return fn
                 except errors.FunctionResolutionError:
-                    logging.warn(
-                        f"Found functional parameter {child.spelling}, but could not lookup defn"
-                    )
-                    return None
+                    pass
+                self.logger.warning(
+                    f"Found functional parameter {child.spelling}, but could not lookup defn"
+                )
+                return None
             return self._hash_to_scope[child.referenced.hash]
         elif child.kind == CursorKind.UNEXPOSED_EXPR:
+            # We might have an anonymous lambda passed in as a parameter - treat
+            # it as an uncolored functions, but parse function calls within
+            # TODO - just register this as a function
             children = list(child.get_children())
             if len(children) == 1:
                 child = children[0]
