@@ -1,4 +1,5 @@
-clang
+.venv/
 __pycache__/
+build/
 dist/
-rainbow_aneeshdurg.egg_info/
+rainbow_aneeshdurg.egg-info/

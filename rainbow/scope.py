@@ -167,7 +167,8 @@ class Scope:
 
     def to_cypher(self) -> str:
         """Must only be called after `self.process`.
-        Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors"""
+        Outputs the call graph as an openCypher CREATE query, tagging all functions with their colors
+        """
 
         _, output = self._scope_fns_to_cypher(True, "")
         output += self._calls_to_cypher()

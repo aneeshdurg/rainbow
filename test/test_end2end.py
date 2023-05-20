@@ -108,7 +108,6 @@ class End2EndTests(unittest.TestCase):
         with self.assertRaises(errors.InvalidAssignmentError):
             sut.run()
 
-    @unittest.expectedFailure
     def test_reject_indirect_aliased_parameter(self):
         src = textwrap.dedent(
             """\

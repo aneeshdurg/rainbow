@@ -190,13 +190,14 @@ class Rainbow:
             raise errors.InvalidAssignmentError(loc, alias, color, resolved.color)
 
         scope_id = self._get_new_scope_id()
-        Scope.create_function(
+        alias = Scope.create_function(
             scope_id,
             scope,
             alias,
             resolved.color,
             resolved.params_to_colors,
         )
+        alias.register_call_scope(resolved)
         return True
 
     def _process_alias_decl(self, node: clang.cindex.Cursor, scope: Scope) -> bool:
