@@ -349,7 +349,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
             #define COLOR(X) [[clang::annotate(#X)]]
             COLOR(RED) int ret0() { return 0; }
             int main() {
-                auto* ret0_alias = ret0;
+                COLOR(RED) auto* ret0_alias = ret0;
                 return ret0_alias();
             }
         """
@@ -372,7 +372,7 @@ class TestRainbowScopeConstruction(unittest.TestCase):
             int main() {
                 (void)ret0();
                 (void)ret1();
-                auto* ret0 = ret1;
+                COLOR(BLUE) auto* ret0 = ret1;
                 return ret0();
             }
         """
