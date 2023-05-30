@@ -209,6 +209,9 @@ class Rainbow:
                 assert color is None
                 color = child_color
 
+        if len(children) < 1:
+            return False
+
         child = children[-1]
         kind = child.kind
         if kind == CursorKind.UNEXPOSED_EXPR:
