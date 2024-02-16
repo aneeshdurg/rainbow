@@ -1,6 +1,17 @@
 #include <functional>
 #include <stdio.h>
 
+/**
+ * In the program below assume that we have the following constraints:
+ *  + RED functions should not call BLUE functions without first calling a
+ *    PURPLE function.
+ *  + GREEN functions should not call RED functions, directly or indirectly.
+ *  + YELLOW functions should not call any non-YELLOW functions.
+ *
+ *  These properties can be verified by running:
+ *  python3 -m rainbow test.cpp config.json
+ */
+
 #define COLOR(x) clang::annotate("COLOR::" #x)
 
 [[COLOR(PURPLE)]] int printf(char *fmt, ...);
