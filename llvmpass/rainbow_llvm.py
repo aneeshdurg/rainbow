@@ -1,5 +1,5 @@
 """
-Rainbow llvm pass - run via https://github.com/aneeshdurg/pyllvmpass
+Rainbow as an llvm pass
 """
 
 import os
@@ -23,10 +23,13 @@ class GlobalFn:
 
 
 def const_str_glbl(m: cllvm.Module, glbl: str) -> str:
-    return m.get_named_global(glbl).get_initializer().get_as_string()[:-1]
+    a = m.get_named_global(glbl).get_initializer().get_as_string()[:-1]
+    if "COLOR::" in a:
+        return a[len("COLOR::") :]
+    return a
 
 
-def parse_annotations(annotations: str, m: cllvm.Module) -> list[GlobalFn]:
+def parse_annotations(annotations: str, m: cllvm.Module) -> dict[str, GlobalFn]:
     annotations_parser = Lark(
         r"""
         annotations : types WS fields
@@ -46,7 +49,7 @@ def parse_annotations(annotations: str, m: cllvm.Module) -> list[GlobalFn]:
         start="annotations",
     )
     parsed = annotations_parser.parse(annotations)
-    res = []
+    res = {}
     for struct in parsed.find_data("struct"):
         attrs = [d.children[0].value for d in struct.find_data("value")]
         # Remove @ prefix
@@ -64,7 +67,7 @@ def parse_annotations(annotations: str, m: cllvm.Module) -> list[GlobalFn]:
                 attr = const_str_glbl(m, attr[1:])
             resolved_attrs.append(attr)
 
-        res.append(GlobalFn(fn_name, filename_glbl, line_no, resolved_attrs))
+        res[fn_name] = GlobalFn(fn_name, filename_glbl, line_no, resolved_attrs)
     return res
 
 
@@ -92,23 +95,39 @@ def do_rainbow_analysis(m: cllvm.Module):
         return
 
     annotations = annotations.get_initializer().print_value_to_string().decode()
-    global_fns = parse_annotations(annotations, m)
-    for fn in global_fns:
+    annotated_module_fns = parse_annotations(annotations, m)
+    for fn in m.iter_functions():
+        # Need to check if the fn is linked in
+        # print("gfn", fn.name)
         # TODO get param colors
+        fn_name = fn.name.decode()
         # TODO pass in filename/line numbers?
-        Scope.create_function(scope_id, root_scope, fn.name, fn.attributes[0], {})
+        if fn_name in annotated_module_fns:
+            Scope.create_function(
+                scope_id,
+                root_scope,
+                fn_name,
+                annotated_module_fns[fn_name].attributes[0],
+                {},
+            )
+        else:
+            Scope.create_function(scope_id, root_scope, fn_name, None, {})
 
-    for fn in global_fns:
-        fn_scope = root_scope.resolve_function(fn.name)
+    for fn in m.iter_functions():
+        fn_scope = root_scope.resolve_function(fn.name.decode())
         assert fn_scope
         scope_id += 1
-        llvm_fn = m.get_named_function(fn.name)
+        llvm_fn = m.get_named_function(fn.name.decode())
         print(fn)
         inst_to_color = {}
         for bb in llvm_fn.iter_basic_blocks():
             for inst in bb.iter_instructions():
                 opcode = cllvm.Opcode[inst.instruction_opcode]
-                if opcode == "Call":
+                if opcode == "Alloca":
+                    parts = inst.print_value_to_string().decode().split()
+                    if parts[3].startswith("%class.anon"):
+                        print("  lambda", str(inst.ptr[0]).split()[-1][:-1])
+                elif opcode == "Call":
                     called_fn = inst.get_operand(inst.get_num_arg_operands())
                     if called_fn.name.decode().startswith("llvm.var.annotation"):
                         # llvm.var.annotation is a hint to analyzers to annotate a particular
@@ -120,11 +139,13 @@ def do_rainbow_analysis(m: cllvm.Module):
                         if iptr not in inst_to_color:
                             inst_to_color[iptr] = []
                         inst_to_color[iptr].append(color)
+                        print("  coloring ", iptr, color)
                         # TODO set parameter colors here
                     else:
                         for i in range(inst.get_num_arg_operands()):
                             iptr = str(inst.get_operand(i).ptr[0]).split()[-1][:-1]
                         callee_name = called_fn.name.decode()
+                        print("  call", callee_name)
                         callee = root_scope.resolve_function(callee_name)
                         if callee:
                             fn_scope.register_call_scope(callee)
