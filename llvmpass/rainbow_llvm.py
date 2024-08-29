@@ -22,7 +22,6 @@ class GlobalFn:
     attributes: list[str]
 
 
-
 def const_str_glbl(m: cllvm.Module, glbl: str) -> str:
     return m.get_named_global(glbl).get_initializer().get_as_string()[:-1]
 
@@ -97,13 +96,7 @@ def do_rainbow_analysis(m: cllvm.Module):
     for fn in global_fns:
         # TODO get param colors
         # TODO pass in filename/line numbers?
-        Scope.create_function(
-            scope_id,
-            root_scope,
-            fn.name,
-            fn.attributes[0],
-            {}
-        )
+        Scope.create_function(scope_id, root_scope, fn.name, fn.attributes[0], {})
 
     for fn in global_fns:
         fn_scope = root_scope.resolve_function(fn.name)
@@ -116,8 +109,8 @@ def do_rainbow_analysis(m: cllvm.Module):
             for inst in bb.iter_instructions():
                 opcode = cllvm.Opcode[inst.instruction_opcode]
                 if opcode == "Call":
-                    called_fn =  inst.get_operand(inst.get_num_arg_operands())
-                    if called_fn.name.decode().startswith('llvm.var.annotation'):
+                    called_fn = inst.get_operand(inst.get_num_arg_operands())
+                    if called_fn.name.decode().startswith("llvm.var.annotation"):
                         # llvm.var.annotation is a hint to analyzers to annotate a particular
                         # instruction
                         annotated_obj = inst.get_operand(0)
@@ -139,8 +132,6 @@ def do_rainbow_analysis(m: cllvm.Module):
     print()
     print(root_scope.to_cypher())
     print(config.run(root_scope))
-
-    return
 
 
 def run_on_module(m: cllvm.Module) -> int:
