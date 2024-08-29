@@ -1,0 +1,24 @@
+{
+  "prefix": "COLOR::",
+  "colors": [
+    "RED", "BLUE", "PURPLE", "YELLOW", "GREEN"
+  ],
+  "patterns": [
+    {
+      "pattern": "p = (:RED)-[:CALLS*]->(:BLUE) WHERE NOT any(n in nodes(p) WHERE n:PURPLE)",
+      "on_match": {
+        "chain": "[n in nodes(p) | n.name + ([l in labels(n) | ':' + l] + [''])[0]]"
+      },
+      "msg": "Found invalid RED/BLUE callchain: %chain"
+    },
+    "(:GREEN)-[:CALLS*]->(:RED)",
+    {
+      "pattern": "(a:YELLOW)-->(x) WHERE NOT x:YELLOW",
+      "on_match": {
+        "a": "a.name",
+        "x": "x.name"
+      },
+      "msg": "Found yellow function (%a) calling non-yellow function (%x)"
+    }
+  ]
+}
