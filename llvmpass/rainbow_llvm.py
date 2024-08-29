@@ -6,7 +6,7 @@ import logging
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import llvmcpy.llvm as cllvm
@@ -26,6 +26,8 @@ class AnnotatedFn:
 @dataclass
 class RainbowLLVM:
     module: cllvm.Module
+    config: Config
+    logger: logging.Logger = field(default_factory=lambda: logging.Logger("rainbow"))
 
     def decode_name(self,  name: str):
         """Demangle C++ symbols"""
@@ -34,11 +36,11 @@ class RainbowLLVM:
         return out[0].decode()
 
 
-    def const_str_glbl(self, glbl: str) -> str:
+    def const_str_glbl(self, glbl: str, remove_prefix: bool=False) -> str:
         """Retrive the value of a constant global string"""
         a = self.module.get_named_global(glbl).get_initializer().get_as_string()[:-1]
-        if "COLOR::" in a:
-            return a[len("COLOR::") :]
+        if remove_prefix and self.config.prefix in a:
+            return a[len(self.config.prefix) :]
         return a
 
 
@@ -85,29 +87,14 @@ class RainbowLLVM:
             resolved_attrs = []
             for attr in attrs:
                 if attr.startswith("@"):
-                    attr = self.const_str_glbl(attr[1:])
+                    attr = self.const_str_glbl(attr[1:], True)
                 resolved_attrs.append(attr)
 
             res[fn_name] = AnnotatedFn(fn_name, filename_glbl, line_no, resolved_attrs)
         return res
 
 
-    def do_rainbow_analysis(self):
-        logging.basicConfig(level=logging.NOTSET)
-        logger = logging.getLogger("rainbow")
-        verbose = os.environ.get("RAINBOW_VERBOSITY", "error").lower()
-        verbosity_map = {
-            "quiet": logging.CRITICAL,
-            "error": logging.ERROR,
-            "warning": logging.WARNING,
-            "info": logging.INFO,
-            "debug": logging.DEBUG,
-        }
-        logger.setLevel(verbosity_map[verbose])
-
-        config_file = os.environ.get("RAINBOW_CONFIG", "rainbow_config.json")
-        config = Config.from_json(Path(config_file), logger=logger)
-
+    def run(self):
         root_scope = Scope.create_root()
         scope_id = 1
 
@@ -155,7 +142,7 @@ class RainbowLLVM:
                             annotated_obj = inst.get_operand(0)
                             iptr = self.get_iptr(annotated_obj)
                             annotation = inst.get_operand(1)
-                            color = self.const_str_glbl(annotation.name.decode())
+                            color = self.const_str_glbl(annotation.name.decode(), True)
                             assert iptr not in inst_to_color, "duplicate color"
                             inst_to_color[iptr] = color
                             # TODO set parameter colors here
@@ -166,15 +153,32 @@ class RainbowLLVM:
                                 # This should be safe because it's a lambda defined
                                 # in this method
                                 if callee_name.endswith("::operator()() const"):
-                                    iptr = self.get_iptr(inst.get_operand(0))
+                                    nargs = inst.get_num_arg_operands()
+                                    iptr = self.get_iptr(inst.get_operand(nargs - 1))
                                     if iptr in lambdas and iptr in inst_to_color:
                                         callee.color = inst_to_color[iptr]
                                 fn_scope.register_call_scope(callee)
 
-        if config.run(root_scope):
+        if self.config.run(root_scope):
+            print(root_scope.to_cypher())
             sys.exit(1)
 
 
 def run_on_module(m: cllvm.Module) -> int:
-    RainbowLLVM(m).do_rainbow_analysis()
+    logging.basicConfig(level=logging.NOTSET)
+    logger = logging.getLogger("rainbow")
+    verbose = os.environ.get("RAINBOW_VERBOSITY", "error").lower()
+    verbosity_map = {
+        "quiet": logging.CRITICAL,
+        "error": logging.ERROR,
+        "warning": logging.WARNING,
+        "info": logging.INFO,
+        "debug": logging.DEBUG,
+    }
+    logger.setLevel(verbosity_map[verbose])
+
+    config_file = os.environ.get("RAINBOW_CONFIG", "rainbow_config.json")
+    config = Config.from_json(Path(config_file), logger=logger)
+
+    RainbowLLVM(m, config, logger).run()
     return 0
